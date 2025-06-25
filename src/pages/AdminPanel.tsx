@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -23,9 +22,8 @@ import { toast } from '@/hooks/use-toast';
 
 interface User {
   id: string;
-  user_id: string;
   name: string;
-  role: string;
+  is_admin: boolean;
   balance: number;
   created_at: string;
 }
@@ -66,7 +64,7 @@ const AdminPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.role === 'admin') {
+    if (profile?.is_admin) {
       fetchAdminData();
     }
   }, [profile]);
@@ -142,7 +140,7 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'confirmed',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.user_id
+          confirmed_by: profile?.id
         })
         .eq('id', depositId);
 
@@ -159,14 +157,14 @@ const AdminPanel: React.FC = () => {
         const { data: currentUser } = await supabase
           .from('profiles')
           .select('balance')
-          .eq('user_id', userId)
+          .eq('id', userId)
           .single();
 
         if (currentUser) {
           await supabase
             .from('profiles')
             .update({ balance: currentUser.balance + amount })
-            .eq('user_id', userId);
+            .eq('id', userId);
         }
       }
 
@@ -192,7 +190,7 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'rejected',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.user_id
+          confirmed_by: profile?.id
         })
         .eq('id', depositId);
 
@@ -218,7 +216,7 @@ const AdminPanel: React.FC = () => {
       const { error } = await supabase
         .from('profiles')
         .update({ balance: newBalance })
-        .eq('user_id', userId);
+        .eq('id', userId);
 
       if (error) throw error;
 
@@ -237,7 +235,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  if (profile?.role !== 'admin') {
+  if (!profile?.is_admin) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
@@ -411,8 +409,8 @@ const AdminPanel: React.FC = () => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
                           <h4 className="font-medium">{user.name}</h4>
-                          <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                            {user.role}
+                          <Badge variant={user.is_admin ? 'default' : 'secondary'}>
+                            {user.is_admin ? 'admin' : 'user'}
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-600">
