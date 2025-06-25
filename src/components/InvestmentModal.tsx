@@ -21,7 +21,7 @@ interface InvestmentPlan {
   name: string;
   min_amount: number;
   max_amount: number;
-  roi_percent: number;
+  roi: number;
   duration_hours: number;
 }
 
@@ -41,7 +41,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
   if (!plan) return null;
 
   const amountNum = parseFloat(amount) || 0;
-  const roiAmount = (amountNum * plan.roi_percent) / 100;
+  const roiAmount = (amountNum * plan.roi) / 100;
   const totalReturn = amountNum + roiAmount;
 
   const handleInvest = async () => {
@@ -84,14 +84,13 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
         .from('investments')
         .insert([
           {
-            user_id: profile.user_id,
+            user_id: profile.id,
             plan_id: plan.id,
             amount: amountNum,
-            roi_amount: roiAmount,
+            roi: roiAmount,
             start_date: startDate.toISOString(),
             end_date: endDate.toISOString(),
             status: 'active',
-            is_reinvestment: isReinvestment,
           },
         ])
         .select()
@@ -103,7 +102,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
       const { error: balanceError } = await supabase
         .from('profiles')
         .update({ balance: profile.balance - amountNum })
-        .eq('user_id', profile.user_id);
+        .eq('id', profile.id);
 
       if (balanceError) throw balanceError;
 
@@ -112,11 +111,11 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
         .from('transactions')
         .insert([
           {
-            user_id: profile.user_id,
+            user_id: profile.id,
             type: isReinvestment ? 'reinvestment' : 'investment',
             amount: -amountNum,
+            status: 'completed',
             description: `${plan.name} ${isReinvestment ? 'reinvestment' : 'investment'} - $${amountNum}`,
-            investment_id: investment.id,
           },
         ]);
 
@@ -163,7 +162,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">ROI:</span>
-              <Badge variant="secondary">{plan.roi_percent}%</Badge>
+              <Badge variant="secondary">{plan.roi}%</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Duration:</span>
@@ -219,7 +218,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
                   <span>${amountNum.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>ROI ({plan.roi_percent}%):</span>
+                  <span>ROI ({plan.roi}%):</span>
                   <span className="text-green-600">+${roiAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-medium border-t pt-1">

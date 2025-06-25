@@ -62,7 +62,7 @@ const Navbar: React.FC = () => {
                     <Settings className="mr-2 h-4 w-4" />
                     Dashboard
                   </DropdownMenuItem>
-                  {profile?.role === 'admin' && (
+                  {profile?.is_admin && (
                     <DropdownMenuItem onClick={() => navigate('/admin')}>
                       <BarChart3 className="mr-2 h-4 w-4" />
                       Admin Panel

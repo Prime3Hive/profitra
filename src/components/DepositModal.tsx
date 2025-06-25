@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -77,14 +76,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
     setLoading(true);
     try {
       const { error } = await supabase
-        .from('deposits')
+        .from('deposit_requests')
         .insert([
           {
-            user_id: profile.user_id,
+            user_id: profile.id,
             amount: parseFloat(amount),
             currency,
-            status: 'pending',
-            request_date: new Date().toISOString(),
+            wallet_address: WALLET_ADDRESSES[currency],
           },
         ]);
 
@@ -95,9 +93,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
         .from('transactions')
         .insert([
           {
-            user_id: profile.user_id,
+            user_id: profile.id,
             type: 'deposit',
             amount: parseFloat(amount),
+            status: 'pending',
             description: `${currency} deposit request - $${amount}`,
           },
         ]);

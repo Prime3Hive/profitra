@@ -25,7 +25,7 @@ interface InvestmentPlan {
   name: string;
   min_amount: number;
   max_amount: number;
-  roi_percent: number;
+  roi: number;
   duration_hours: number;
   is_active: boolean;
 }
@@ -34,11 +34,10 @@ interface Investment {
   id: string;
   plan_id: string;
   amount: number;
-  roi_amount: number;
+  roi: number;
   start_date: string;
   end_date: string;
   status: string;
-  is_reinvestment: boolean;
   plan?: InvestmentPlan;
 }
 
@@ -85,7 +84,7 @@ const Dashboard: React.FC = () => {
           *,
           plan:investment_plans(*)
         `)
-        .eq('user_id', profile?.user_id)
+        .eq('user_id', profile?.id)
         .order('created_at', { ascending: false });
 
       if (investmentsError) throw investmentsError;
@@ -95,7 +94,7 @@ const Dashboard: React.FC = () => {
       const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', profile?.user_id)
+        .eq('user_id', profile?.id)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -137,7 +136,7 @@ const Dashboard: React.FC = () => {
 
   const activeInvestments = investments.filter(inv => inv.status === 'active');
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
-  const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi_amount, 0);
+  const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi, 0);
 
   if (loading) {
     return (
@@ -248,7 +247,7 @@ const Dashboard: React.FC = () => {
                   <CardHeader>
                     <CardTitle className="flex justify-between items-center">
                       {plan.name}
-                      <Badge variant="secondary">{plan.roi_percent}% ROI</Badge>
+                      <Badge variant="secondary">{plan.roi}% ROI</Badge>
                     </CardTitle>
                     <CardDescription>
                       ${plan.min_amount.toLocaleString()} - {plan.max_amount ? `$${plan.max_amount.toLocaleString()}` : 'Unlimited'}
@@ -294,12 +293,10 @@ const Dashboard: React.FC = () => {
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
                         {investment.plan?.name}
-                        <Badge variant={investment.is_reinvestment ? "secondary" : "default"}>
-                          {investment.is_reinvestment ? 'Reinvestment' : 'Investment'}
-                        </Badge>
+                        <Badge variant="default">Investment</Badge>
                       </CardTitle>
                       <CardDescription>
-                        Invested: ${investment.amount.toFixed(2)} • Expected: ${investment.roi_amount.toFixed(2)}
+                        Invested: ${investment.amount.toFixed(2)} • Expected: ${investment.roi.toFixed(2)}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -309,7 +306,7 @@ const Dashboard: React.FC = () => {
                           {getTimeRemaining(investment.end_date)}
                         </div>
                         <div className="text-lg font-semibold text-green-600">
-                          +{investment.plan?.roi_percent}%
+                          +{investment.plan?.roi}%
                         </div>
                       </div>
                     </CardContent>
