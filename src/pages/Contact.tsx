@@ -223,7 +223,7 @@ const Contact: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Live Chat:</span>
-                      <span className="font-medium">< 1 hour</span>
+                      <span className="font-medium">&lt; 1 hour</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Phone Support:</span>
