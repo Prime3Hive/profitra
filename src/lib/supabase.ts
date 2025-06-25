@@ -7,39 +7,40 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Database types
+// Database types matching the actual schema
 export interface Profile {
   id: string;
-  user_id: string;
   name: string;
-  btc_wallet?: string;
-  usdt_wallet?: string;
-  role: 'user' | 'admin';
+  btc_wallet: string;
+  usdt_wallet: string;
+  is_admin: boolean;
   balance: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface InvestmentPlan {
   id: string;
   name: string;
+  description: string;
   min_amount: number;
   max_amount: number;
-  roi_percent: number;
+  roi: number;
   duration_hours: number;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
-export interface Deposit {
+export interface DepositRequest {
   id: string;
   user_id: string;
   amount: number;
   currency: 'BTC' | 'USDT';
+  wallet_address: string;
   status: 'pending' | 'confirmed' | 'rejected';
-  request_date: string;
-  confirmed_date?: string;
-  confirmed_by?: string;
-  transaction_hash?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Investment {
@@ -47,11 +48,12 @@ export interface Investment {
   user_id: string;
   plan_id: string;
   amount: number;
-  roi_amount: number;
+  roi: number;
   start_date: string;
   end_date: string;
   status: 'active' | 'completed' | 'cancelled';
-  is_reinvestment: boolean;
+  created_at: string;
+  updated_at: string;
   plan?: InvestmentPlan;
 }
 
@@ -60,8 +62,7 @@ export interface Transaction {
   user_id: string;
   type: 'deposit' | 'investment' | 'roi_return' | 'reinvestment';
   amount: number;
+  status: 'pending' | 'completed' | 'failed';
   description: string;
   created_at: string;
-  investment_id?: string;
-  deposit_id?: string;
 }

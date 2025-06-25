@@ -6,11 +6,10 @@ import { toast } from '@/hooks/use-toast';
 
 interface Profile {
   id: string;
-  user_id: string;
   name: string;
-  btc_wallet?: string;
-  usdt_wallet?: string;
-  role: 'user' | 'admin';
+  btc_wallet: string;
+  usdt_wallet: string;
+  is_admin: boolean;
   balance: number;
   created_at: string;
 }
@@ -72,10 +71,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -91,29 +93,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // First, sign up the user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            name: name,
+            btc_wallet: btcWallet,
+            usdt_wallet: usdtWallet
+          }
+        }
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
 
-      if (data.user) {
-        // Create profile
+      if (authData.user) {
+        // Create profile manually if needed (as backup to the trigger)
         const { error: profileError } = await supabase
           .from('profiles')
           .insert([
             {
-              user_id: data.user.id,
+              id: authData.user.id,
               name,
               btc_wallet: btcWallet,
               usdt_wallet: usdtWallet,
-              role: 'user',
+              is_admin: false,
               balance: 0,
             },
           ]);
 
-        if (profileError) throw profileError;
+        // Ignore conflict errors as the trigger might have already created the profile
+        if (profileError && !profileError.message.includes('duplicate key')) {
+          console.error('Profile creation error:', profileError);
+        }
 
         toast({
           title: "Success",
@@ -121,9 +135,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (error: any) {
+      console.error('Signup error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to create account",
         variant: "destructive",
       });
       throw error;
@@ -201,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase
         .from('profiles')
         .update(updates)
-        .eq('user_id', user.id);
+        .eq('id', user.id);
 
       if (error) throw error;
 
