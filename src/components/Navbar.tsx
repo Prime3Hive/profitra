@@ -1,0 +1,94 @@
+
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { User, LogOut, Settings, BarChart3 } from 'lucide-react';
+
+const Navbar: React.FC = () => {
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  return (
+    <nav className="bg-white shadow-sm border-b">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex items-center">
+            <Link to="/" className="flex items-center space-x-2">
+              <BarChart3 className="h-8 w-8 text-blue-600" />
+              <span className="text-xl font-bold text-gray-900">InvestPro</span>
+            </Link>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-6">
+              <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Home
+              </Link>
+              <Link to="/about" className="text-gray-700 hover:text-blue-600 transition-colors">
+                About
+              </Link>
+              <Link to="/contact" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Contact
+              </Link>
+            </div>
+
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <User className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end">
+                  <div className="px-2 py-1.5 text-sm font-medium">
+                    {profile?.name || user.email}
+                  </div>
+                  <div className="px-2 py-1.5 text-xs text-gray-500">
+                    Balance: ${profile?.balance?.toFixed(2) || '0.00'}
+                  </div>
+                  <DropdownMenuItem onClick={() => navigate('/dashboard')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Dashboard
+                  </DropdownMenuItem>
+                  {profile?.role === 'admin' && (
+                    <DropdownMenuItem onClick={() => navigate('/admin')}>
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Admin Panel
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex items-center space-x-3">
+                <Button variant="ghost" asChild>
+                  <Link to="/signin">Sign In</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/signup">Sign Up</Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+};
+
+export default Navbar;
