@@ -42,7 +42,7 @@ const Debug: React.FC = () => {
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('user_id', session.user.id) // Changed from eq('id', session.user.id) to eq('user_id', session.user.id)
             .single();
             
           if (profileError) {
@@ -187,6 +187,7 @@ const Debug: React.FC = () => {
               profile_exists: !!profile,
               profile_data: profile ? {
                 id: profile.id,
+                user_id: profile.user_id,
                 name: profile.name,
                 role: profile.role
               } : null

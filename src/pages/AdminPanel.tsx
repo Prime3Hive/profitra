@@ -144,7 +144,7 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'confirmed',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.id
+          confirmed_by: profile?.user_id // Changed from profile?.id to profile?.user_id
         })
         .eq('id', depositId);
 
@@ -194,7 +194,7 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'rejected',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.id
+          confirmed_by: profile?.user_id // Changed from profile?.id to profile?.user_id
         })
         .eq('id', depositId);
 

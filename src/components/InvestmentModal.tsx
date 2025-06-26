@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -84,7 +83,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
         .from('investments')
         .insert([
           {
-            user_id: profile.id,
+            user_id: profile.user_id, // Changed from profile.id to profile.user_id
             plan_id: plan.id,
             amount: amountNum,
             roi: roiAmount,
@@ -111,7 +110,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
         .from('transactions')
         .insert([
           {
-            user_id: profile.id,
+            user_id: profile.user_id, // Changed from profile.id to profile.user_id
             type: isReinvestment ? 'reinvestment' : 'investment',
             amount: -amountNum,
             status: 'completed',

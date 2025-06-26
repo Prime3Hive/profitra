@@ -83,12 +83,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
 
     setLoading(true);
     try {
-      console.log('DepositModal: Creating deposit request for user ID:', profile.id);
+      console.log('DepositModal: Creating deposit request for user ID:', profile.user_id);
       const { data: depositData, error: depositError } = await supabase
         .from('deposit_requests')
         .insert([
           {
-            user_id: profile.id,
+            user_id: profile.user_id, // Changed from profile.id to profile.user_id
             amount: parseFloat(amount),
             currency,
             wallet_address: WALLET_ADDRESSES[currency],
@@ -110,7 +110,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
         .from('transactions')
         .insert([
           {
-            user_id: profile.id,
+            user_id: profile.user_id, // Changed from profile.id to profile.user_id
             type: 'deposit',
             amount: parseFloat(amount),
             status: 'pending',

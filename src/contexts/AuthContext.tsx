@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -6,6 +5,7 @@ import { toast } from '@/hooks/use-toast';
 
 interface Profile {
   id: string;
+  user_id: string; // Added explicit user_id property
   name: string;
   btc_wallet: string;
   usdt_wallet: string;

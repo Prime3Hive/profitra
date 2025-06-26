@@ -42,6 +42,7 @@ export const supabase = supabaseInstance;
 // Database types matching the actual schema
 export interface Profile {
   id: string;
+  user_id: string; // Added explicit user_id property
   name: string;
   btc_wallet: string;
   usdt_wallet: string;

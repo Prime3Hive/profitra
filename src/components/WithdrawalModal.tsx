@@ -59,7 +59,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
       const { data: withdrawal, error: withdrawalError } = await supabase
         .from('withdrawal_requests')
         .insert({
-          user_id: profile?.id,
+          user_id: profile?.user_id, // Changed from profile?.id to profile?.user_id
           amount: numAmount,
           currency,
           wallet_address: walletAddress,
@@ -74,7 +74,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
       const { error: transactionError } = await supabase
         .from('transactions')
         .insert({
-          user_id: profile?.id,
+          user_id: profile?.user_id, // Changed from profile?.id to profile?.user_id
           type: 'withdrawal_request',
           amount: -numAmount, // negative amount for withdrawal
           description: `Withdrawal request for ${numAmount} ${currency}`
@@ -86,7 +86,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
       const { error: balanceError } = await supabase
         .from('profiles')
         .update({ balance: (profile?.balance || 0) - numAmount })
-        .eq('user_id', profile?.id);
+        .eq('user_id', profile?.user_id); // Changed from eq('id', profile?.id) to eq('user_id', profile?.user_id)
 
       if (balanceError) throw balanceError;
 
