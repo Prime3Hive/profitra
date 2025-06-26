@@ -3,12 +3,18 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updateProfile: (data: Partial<Profile>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const { toast } = useToast();
 
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
@@ -50,7 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               user_id: userId,
               name: 'New User',
               role: 'user',
-              balance: 0
+              balance: 0,
+              btc_wallet: '',
+              usdt_wallet: ''
             })
             .select()
             .single();
@@ -83,6 +92,147 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('AuthContext: Refreshing profile for user:', user.id);
     const profileData = await fetchProfile(user.id);
     setProfile(profileData);
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        toast({
+          title: "Sign In Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully signed in.",
+      });
+    } catch (error) {
+      console.error('AuthContext: Sign in error:', error);
+      throw error;
+    }
+  };
+
+  const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            btc_wallet: btcWallet,
+            usdt_wallet: usdtWallet,
+          },
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      });
+
+      if (error) {
+        toast({
+          title: "Sign Up Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      toast({
+        title: "Account Created!",
+        description: "Please check your email to confirm your account.",
+      });
+    } catch (error) {
+      console.error('AuthContext: Sign up error:', error);
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast({
+          title: "Sign Out Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      toast({
+        title: "Signed Out",
+        description: "You have been signed out successfully.",
+      });
+    } catch (error) {
+      console.error('AuthContext: Sign out error:', error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast({
+          title: "Password Reset Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      toast({
+        title: "Password Reset Sent",
+        description: "Check your email for password reset instructions.",
+      });
+    } catch (error) {
+      console.error('AuthContext: Password reset error:', error);
+      throw error;
+    }
+  };
+
+  const updateProfile = async (data: Partial<Profile>) => {
+    if (!user?.id) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(data)
+        .eq('user_id', user.id);
+
+      if (error) {
+        toast({
+          title: "Profile Update Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      // Refresh profile after update
+      await refreshProfile();
+
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
+      });
+    } catch (error) {
+      console.error('AuthContext: Profile update error:', error);
+      throw error;
+    }
   };
 
   useEffect(() => {
@@ -155,9 +305,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext: Safety timeout reached, forcing loading to false');
         setLoading(false);
       }
-    }, 3000); // Reduced to 3 seconds
+    }, 3000);
 
     return () => {
+      console.log('AuthContext: Cleaning up');
       mounted = false;
       subscription.unsubscribe();
       clearTimeout(timeout);
@@ -165,7 +316,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [initialized, profile, loading]);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      loading, 
+      refreshProfile, 
+      signIn, 
+      signUp, 
+      signOut, 
+      resetPassword, 
+      updateProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );
