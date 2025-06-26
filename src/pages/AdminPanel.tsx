@@ -36,7 +36,7 @@ interface Deposit {
   currency: string;
   status: string;
   request_date: string;
-  profiles: { name: string } | null;
+  user_name?: string;
 }
 
 interface Investment {
@@ -47,8 +47,9 @@ interface Investment {
   status: string;
   start_date: string;
   end_date: string;
-  profiles: { name: string } | null;
-  investment_plans: { name: string } | null;
+  plan_id: string;
+  user_name?: string;
+  plan_name?: string;
 }
 
 const AdminPanel: React.FC = () => {
@@ -86,46 +87,72 @@ const AdminPanel: React.FC = () => {
       if (usersError) throw usersError;
       setUsers(usersData || []);
 
-      // Fetch pending deposits with user names
+      // Fetch pending deposits
       const { data: depositsData, error: depositsError } = await supabase
         .from('deposits')
-        .select(`
-          *,
-          profiles(name)
-        `)
+        .select('*')
         .eq('status', 'pending')
         .order('request_date', { ascending: false });
 
       if (depositsError) throw depositsError;
-      const formattedDeposits = (depositsData || []).map(deposit => ({
-        ...deposit,
-        profiles: deposit.profiles as { name: string } | null
-      }));
-      setDeposits(formattedDeposits);
 
-      // Fetch all investments with user names and plan details
+      // Get user names for deposits
+      const depositsWithUserNames = await Promise.all(
+        (depositsData || []).map(async (deposit) => {
+          const { data: userData } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', deposit.user_id)
+            .single();
+          
+          return {
+            ...deposit,
+            user_name: userData?.name || 'Unknown User'
+          };
+        })
+      );
+
+      setDeposits(depositsWithUserNames);
+
+      // Fetch all investments
       const { data: investmentsData, error: investmentsError } = await supabase
         .from('investments')
-        .select(`
-          *,
-          profiles(name),
-          investment_plans(name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (investmentsError) throw investmentsError;
-      const formattedInvestments = (investmentsData || []).map(investment => ({
-        ...investment,
-        profiles: investment.profiles as { name: string } | null,
-        investment_plans: investment.investment_plans as { name: string } | null
-      }));
-      setInvestments(formattedInvestments);
+
+      // Get user names and plan names for investments
+      const investmentsWithDetails = await Promise.all(
+        (investmentsData || []).map(async (investment) => {
+          const [userResult, planResult] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('name')
+              .eq('user_id', investment.user_id)
+              .single(),
+            supabase
+              .from('investment_plans')
+              .select('name')
+              .eq('id', investment.plan_id)
+              .single()
+          ]);
+          
+          return {
+            ...investment,
+            user_name: userResult.data?.name || 'Unknown User',
+            plan_name: planResult.data?.name || 'Unknown Plan'
+          };
+        })
+      );
+
+      setInvestments(investmentsWithDetails);
 
       // Calculate stats
-      const totalVolume = formattedInvestments?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
-      const activeInvestments = formattedInvestments?.filter(inv => inv.status === 'active').length || 0;
-      const totalDeposits = formattedDeposits?.reduce((sum, dep) => sum + dep.amount, 0) || 0;
+      const totalVolume = investmentsWithDetails?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
+      const activeInvestments = investmentsWithDetails?.filter(inv => inv.status === 'active').length || 0;
+      const totalDeposits = depositsWithUserNames?.reduce((sum, dep) => sum + dep.amount, 0) || 0;
 
       setStats({
         totalUsers: usersData?.length || 0,
@@ -367,7 +394,7 @@ const AdminPanel: React.FC = () => {
                     {deposits.map((deposit) => (
                       <div key={deposit.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex-1">
-                          <h4 className="font-medium">{deposit.profiles?.name || 'Unknown User'}</h4>
+                          <h4 className="font-medium">{deposit.user_name}</h4>
                           <p className="text-sm text-gray-600">
                             ${deposit.amount.toFixed(2)} via {deposit.currency}
                           </p>
@@ -457,13 +484,13 @@ const AdminPanel: React.FC = () => {
                     <div key={investment.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          <h4 className="font-medium">{investment.profiles.name}</h4>
+                          <h4 className="font-medium">{investment.user_name}</h4>
                           <Badge variant={investment.status === 'active' ? 'default' : 'secondary'}>
                             {investment.status}
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-600">
-                          {investment.plan?.name} - ${investment.amount.toFixed(2)} 
+                          {investment.plan_name} - ${investment.amount.toFixed(2)} 
                           (ROI: ${investment.roi_amount.toFixed(2)})
                         </p>
                         <p className="text-xs text-gray-400">
