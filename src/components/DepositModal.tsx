@@ -71,11 +71,20 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
   };
 
   const handleConfirmDeposit = async () => {
-    if (!profile) return;
+    if (!profile) {
+      console.error('DepositModal: No profile available for deposit');
+      toast({
+        title: "Error",
+        description: "User profile not found. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      console.log('DepositModal: Creating deposit request for user ID:', profile.id);
+      const { data: depositData, error: depositError } = await supabase
         .from('deposit_requests')
         .insert([
           {
@@ -83,13 +92,21 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
             amount: parseFloat(amount),
             currency,
             wallet_address: WALLET_ADDRESSES[currency],
+            status: 'pending'
           },
-        ]);
+        ])
+        .select();
 
-      if (error) throw error;
+      if (depositError) {
+        console.error('DepositModal: Error creating deposit request:', depositError);
+        throw depositError;
+      }
+      
+      console.log('DepositModal: Deposit request created successfully:', depositData);
 
       // Create transaction record
-      await supabase
+      console.log('DepositModal: Creating transaction record');
+      const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
         .insert([
           {
@@ -99,7 +116,16 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
             status: 'pending',
             description: `${currency} deposit request - $${amount}`,
           },
-        ]);
+        ])
+        .select();
+
+      if (transactionError) {
+        console.error('DepositModal: Error creating transaction record:', transactionError);
+        // Don't throw here, as the deposit request was already created
+        console.warn('DepositModal: Deposit request created but transaction record failed');
+      } else {
+        console.log('DepositModal: Transaction record created successfully:', transactionData);
+      }
 
       toast({
         title: "Success!",
@@ -109,9 +135,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
       onSuccess();
       handleClose();
     } catch (error: any) {
+      console.error('DepositModal: Error in handleConfirmDeposit:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to process deposit request",
         variant: "destructive",
       });
     } finally {

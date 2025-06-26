@@ -23,7 +23,7 @@ import { toast } from '@/hooks/use-toast';
 interface User {
   id: string;
   name: string;
-  is_admin: boolean;
+  role: string;
   balance: number;
   created_at: string;
 }
@@ -64,8 +64,12 @@ const AdminPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.is_admin) {
+    console.log('AdminPanel: Profile loaded:', profile);
+    if (profile?.role === 'admin') {
+      console.log('AdminPanel: User is admin, fetching admin data');
       fetchAdminData();
+    } else {
+      console.log('AdminPanel: User is not admin, role:', profile?.role);
     }
   }, [profile]);
 
@@ -235,7 +239,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  if (!profile?.is_admin) {
+  if (profile?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
@@ -409,8 +413,8 @@ const AdminPanel: React.FC = () => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
                           <h4 className="font-medium">{user.name}</h4>
-                          <Badge variant={user.is_admin ? 'default' : 'secondary'}>
-                            {user.is_admin ? 'admin' : 'user'}
+                          <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                            {user.role === 'admin' ? 'admin' : 'user'}
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-600">

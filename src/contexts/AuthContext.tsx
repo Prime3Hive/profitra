@@ -9,7 +9,7 @@ interface Profile {
   name: string;
   btc_wallet: string;
   usdt_wallet: string;
-  is_admin: boolean;
+  role: string; // Changed from is_admin: boolean to role: string
   balance: number;
   created_at: string;
 }
@@ -42,50 +42,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('AuthContext: Initializing auth state');
+    let isMounted = true;
+    
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      console.log('AuthContext: Session check complete', { hasSession: !!session });
       setUser(session?.user ?? null);
       if (session?.user) {
+        console.log('AuthContext: User found in session, fetching profile');
         fetchProfile(session.user.id);
       } else {
+        console.log('AuthContext: No user in session, setting loading to false');
         setLoading(false);
       }
+    }).catch(error => {
+      if (!isMounted) return;
+      console.error('AuthContext: Error getting session:', error);
+      setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      console.log('AuthContext: Auth state changed', { event, hasUser: !!session?.user });
       setUser(session?.user ?? null);
       if (session?.user) {
+        console.log('AuthContext: User found in auth change, fetching profile');
         await fetchProfile(session.user.id);
       } else {
+        console.log('AuthContext: No user in auth change, clearing profile');
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety timeout to prevent infinite loading
+    const safetyTimer = setTimeout(() => {
+      if (isMounted && loading) {
+        console.log('AuthContext: Safety timeout reached, forcing loading to false');
+        setLoading(false);
+      }
+    }, 5000); // 5 second safety timeout
+
+    return () => {
+      console.log('AuthContext: Cleaning up');
+      isMounted = false;
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
+    console.log('AuthContext: Fetching profile for user ID:', userId);
     try {
-      const { data, error } = await supabase
+      // Create a default profile if none exists
+      const createDefaultProfile = async () => {
+        console.log('AuthContext: Creating default profile for user');
+        try {
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: userId, 
+              name: 'New User',
+              role: 'user',
+              balance: 0,
+              btc_wallet: '',
+              usdt_wallet: ''
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            console.error('AuthContext: Error creating default profile:', createError);
+            return null;
+          }
+
+          console.log('AuthContext: Default profile created:', newProfile);
+          return newProfile;
+        } catch (error) {
+          console.error('AuthContext: Error in createDefaultProfile:', error);
+          return null;
+        }
+      };
+
+      // First try to get the existing profile
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (error) {
+        if (error.code === 'PGRST116') { 
+          console.log('AuthContext: No profile found, creating default profile');
+          const newProfile = await createDefaultProfile();
+          if (newProfile) {
+            console.log('AuthContext: Setting profile from newly created default');
+            setProfile(newProfile);
+          } else {
+            console.error('AuthContext: Failed to create default profile');
+          }
+        } else {
+          console.error('AuthContext: Error fetching profile:', error);
+        }
+        setLoading(false);
+        return;
       }
 
-      setProfile(data);
+      if (profile) {
+        console.log('AuthContext: Profile found:', profile);
+        setProfile(profile);
+      } else {
+        console.log('AuthContext: No profile found despite no error, creating default profile');
+        const newProfile = await createDefaultProfile();
+        if (newProfile) {
+          console.log('AuthContext: Setting profile from newly created default');
+          setProfile(newProfile);
+        }
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load profile data",
-        variant: "destructive",
-      });
+      console.error('AuthContext: Error in fetchProfile:', error);
     } finally {
       setLoading(false);
     }
@@ -93,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
     try {
+      console.log('AuthContext: Signing up new user with email:', email);
       // First, sign up the user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -107,26 +186,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('AuthContext: Auth signup error:', authError);
+        throw authError;
+      }
 
       if (authData.user) {
+        console.log('AuthContext: User created successfully, creating profile for user ID:', authData.user.id);
         // Create profile manually if needed (as backup to the trigger)
         const { error: profileError } = await supabase
           .from('profiles')
           .insert([
             {
-              id: authData.user.id,
+              user_id: authData.user.id, // Use user_id instead of id
               name,
               btc_wallet: btcWallet,
               usdt_wallet: usdtWallet,
-              is_admin: false,
+              role: 'user', // Changed from is_admin: false to role: 'user'
               balance: 0,
             },
           ]);
 
         // Ignore conflict errors as the trigger might have already created the profile
-        if (profileError && !profileError.message.includes('duplicate key')) {
-          console.error('Profile creation error:', profileError);
+        if (profileError) {
+          if (profileError.message.includes('duplicate key')) {
+            console.log('AuthContext: Profile already exists (likely created by trigger)');
+          } else {
+            console.error('AuthContext: Profile creation error:', profileError);
+          }
+        } else {
+          console.log('AuthContext: Profile created successfully');
         }
 
         toast({
@@ -135,7 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (error: any) {
-      console.error('Signup error:', error);
+      console.error('AuthContext: Signup error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create account",
@@ -213,13 +302,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) throw new Error('No user logged in');
 
     try {
+      console.log('AuthContext: Updating profile for user ID:', user.id, 'with updates:', updates);
       const { error } = await supabase
         .from('profiles')
         .update(updates)
-        .eq('id', user.id);
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('AuthContext: Error updating profile:', error);
+        throw error;
+      }
 
+      console.log('AuthContext: Profile updated successfully, refreshing profile');
       await refreshProfile();
 
       toast({
@@ -227,6 +321,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Profile updated successfully!",
       });
     } catch (error: any) {
+      console.error('AuthContext: Error in updateProfile:', error);
       toast({
         title: "Error",
         description: error.message,

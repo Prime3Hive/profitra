@@ -12,12 +12,17 @@ import {
   Clock, 
   History,
   Plus,
-  RefreshCw
+  RefreshCw,
+  DollarSign,
+  ArrowUpRight,
+  Eye,
+  LogOut
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import DepositModal from '@/components/DepositModal';
 import InvestmentModal from '@/components/InvestmentModal';
 import ProfileModal from '@/components/ProfileModal';
+import WithdrawalModal from '@/components/WithdrawalModal';
 import { toast } from '@/hooks/use-toast';
 
 interface InvestmentPlan {
@@ -58,6 +63,7 @@ const Dashboard: React.FC = () => {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showInvestmentModal, setShowInvestmentModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<InvestmentPlan | null>(null);
 
   useEffect(() => {
@@ -67,6 +73,13 @@ const Dashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      if (!profile?.id) {
+        console.error('Dashboard: No profile ID available for fetching data');
+        return;
+      }
+      
+      console.log('Dashboard: Fetching data for user ID:', profile.id);
+      
       // Fetch investment plans
       const { data: plansData, error: plansError } = await supabase
         .from('investment_plans')
@@ -74,7 +87,11 @@ const Dashboard: React.FC = () => {
         .eq('is_active', true)
         .order('min_amount');
 
-      if (plansError) throw plansError;
+      if (plansError) {
+        console.error('Dashboard: Error fetching investment plans:', plansError);
+        throw plansError;
+      }
+      console.log('Dashboard: Fetched plans:', plansData?.length || 0);
       setPlans(plansData || []);
 
       // Fetch user investments
@@ -84,25 +101,33 @@ const Dashboard: React.FC = () => {
           *,
           plan:investment_plans(*)
         `)
-        .eq('user_id', profile?.id)
+        .eq('user_id', profile.id)
         .order('created_at', { ascending: false });
 
-      if (investmentsError) throw investmentsError;
+      if (investmentsError) {
+        console.error('Dashboard: Error fetching investments:', investmentsError);
+        throw investmentsError;
+      }
+      console.log('Dashboard: Fetched investments:', investmentsData?.length || 0);
       setInvestments(investmentsData || []);
 
       // Fetch user transactions
       const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', profile?.id)
+        .eq('user_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (transactionsError) throw transactionsError;
+      if (transactionsError) {
+        console.error('Dashboard: Error fetching transactions:', transactionsError);
+        throw transactionsError;
+      }
+      console.log('Dashboard: Fetched transactions:', transactionsData?.length || 0);
       setTransactions(transactionsData || []);
 
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Dashboard: Error fetching data:', error);
       toast({
         title: "Error",
         description: "Failed to load dashboard data",
@@ -387,6 +412,16 @@ const Dashboard: React.FC = () => {
         onSuccess={() => {
           setShowProfileModal(false);
           refreshProfile();
+        }}
+      />
+      
+      <WithdrawalModal 
+        isOpen={showWithdrawalModal} 
+        onClose={() => setShowWithdrawalModal(false)}
+        onSuccess={() => {
+          setShowWithdrawalModal(false);
+          refreshProfile();
+          fetchData();
         }}
       />
     </div>
