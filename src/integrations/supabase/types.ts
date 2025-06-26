@@ -9,52 +9,59 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      admin_settings: {
+        Row: {
+          created_at: string
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
-          created_at: string | null
+          created_at: string
+          details: Json | null
+          entity: string
+          entity_id: string | null
           id: string
-          ip_address: unknown | null
-          new_values: Json | null
-          old_values: Json | null
-          record_id: string | null
-          table_name: string
-          user_agent: string | null
           user_id: string | null
         }
         Insert: {
           action: string
-          created_at?: string | null
+          created_at?: string
+          details?: Json | null
+          entity: string
+          entity_id?: string | null
           id?: string
-          ip_address?: unknown | null
-          new_values?: Json | null
-          old_values?: Json | null
-          record_id?: string | null
-          table_name: string
-          user_agent?: string | null
           user_id?: string | null
         }
         Update: {
           action?: string
-          created_at?: string | null
+          created_at?: string
+          details?: Json | null
+          entity?: string
+          entity_id?: string | null
           id?: string
-          ip_address?: unknown | null
-          new_values?: Json | null
-          old_values?: Json | null
-          record_id?: string | null
-          table_name?: string
-          user_agent?: string | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "audit_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       deposit_requests: {
         Row: {
@@ -87,51 +94,85 @@ export type Database = {
           user_id?: string | null
           wallet_address?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "deposit_requests_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      deposits: {
+        Row: {
+          amount: number
+          confirmed_by: string | null
+          confirmed_date: string | null
+          created_at: string
+          currency: string
+          id: string
+          notes: string | null
+          request_date: string
+          status: string | null
+          transaction_hash: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          confirmed_by?: string | null
+          confirmed_date?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          notes?: string | null
+          request_date?: string
+          status?: string | null
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          confirmed_by?: string | null
+          confirmed_date?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          notes?: string | null
+          request_date?: string
+          status?: string | null
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       investment_plans: {
         Row: {
           created_at: string
-          description: string
           duration_hours: number
           id: string
-          is_active: boolean
-          max_amount: number
+          is_active: boolean | null
+          max_amount: number | null
           min_amount: number
           name: string
-          roi: number
+          roi_percent: number
           updated_at: string
         }
         Insert: {
           created_at?: string
-          description: string
           duration_hours: number
           id?: string
-          is_active?: boolean
-          max_amount: number
+          is_active?: boolean | null
+          max_amount?: number | null
           min_amount: number
           name: string
-          roi: number
+          roi_percent: number
           updated_at?: string
         }
         Update: {
           created_at?: string
-          description?: string
           duration_hours?: number
           id?: string
-          is_active?: boolean
-          max_amount?: number
+          is_active?: boolean | null
+          max_amount?: number | null
           min_amount?: number
           name?: string
-          roi?: number
+          roi_percent?: number
           updated_at?: string
         }
         Relationships: []
@@ -142,10 +183,11 @@ export type Database = {
           created_at: string
           end_date: string
           id: string
+          is_reinvestment: boolean | null
           plan_id: string | null
-          roi: number
+          roi_amount: number
           start_date: string
-          status: string
+          status: string | null
           updated_at: string
           user_id: string | null
         }
@@ -154,10 +196,11 @@ export type Database = {
           created_at?: string
           end_date: string
           id?: string
+          is_reinvestment?: boolean | null
           plan_id?: string | null
-          roi: number
+          roi_amount: number
           start_date?: string
-          status?: string
+          status?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -166,10 +209,11 @@ export type Database = {
           created_at?: string
           end_date?: string
           id?: string
+          is_reinvestment?: boolean | null
           plan_id?: string | null
-          roi?: number
+          roi_amount?: number
           start_date?: string
-          status?: string
+          status?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -181,117 +225,88 @@ export type Database = {
             referencedRelation: "investment_plans"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "investments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
         ]
       }
       profiles: {
         Row: {
-          balance: number
-          btc_wallet: string
+          balance: number | null
+          btc_wallet: string | null
           created_at: string
           id: string
-          is_admin: boolean
           name: string
+          role: string | null
           updated_at: string
-          usdt_wallet: string
+          usdt_wallet: string | null
+          user_id: string | null
         }
         Insert: {
-          balance?: number
-          btc_wallet?: string
-          created_at?: string
-          id: string
-          is_admin?: boolean
-          name: string
-          updated_at?: string
-          usdt_wallet?: string
-        }
-        Update: {
-          balance?: number
-          btc_wallet?: string
+          balance?: number | null
+          btc_wallet?: string | null
           created_at?: string
           id?: string
-          is_admin?: boolean
-          name?: string
+          name: string
+          role?: string | null
           updated_at?: string
-          usdt_wallet?: string
+          usdt_wallet?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          balance?: number | null
+          btc_wallet?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          role?: string | null
+          updated_at?: string
+          usdt_wallet?: string | null
+          user_id?: string | null
         }
         Relationships: []
-      }
-      rate_limits: {
-        Row: {
-          action: string
-          count: number | null
-          created_at: string | null
-          id: string
-          user_id: string | null
-          window_start: string | null
-        }
-        Insert: {
-          action: string
-          count?: number | null
-          created_at?: string | null
-          id?: string
-          user_id?: string | null
-          window_start?: string | null
-        }
-        Update: {
-          action?: string
-          count?: number | null
-          created_at?: string | null
-          id?: string
-          user_id?: string | null
-          window_start?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "rate_limits_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       transactions: {
         Row: {
           amount: number
           created_at: string
+          deposit_id: string | null
           description: string
           id: string
-          status: string
+          investment_id: string | null
           type: string
           user_id: string | null
         }
         Insert: {
           amount: number
           created_at?: string
+          deposit_id?: string | null
           description: string
           id?: string
-          status: string
+          investment_id?: string | null
           type: string
           user_id?: string | null
         }
         Update: {
           amount?: number
           created_at?: string
+          deposit_id?: string | null
           description?: string
           id?: string
-          status?: string
+          investment_id?: string | null
           type?: string
           user_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "transactions_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "transactions_deposit_id_fkey"
+            columns: ["deposit_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "deposits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
             referencedColumns: ["id"]
           },
         ]
@@ -327,74 +342,20 @@ export type Database = {
           user_id?: string | null
           wallet_address?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "withdrawal_requests_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      check_admin_status: {
-        Args: { user_id: string }
-        Returns: boolean
-      }
-      check_rate_limit: {
-        Args: {
-          p_user_id: string
-          p_action: string
-          p_limit?: number
-          p_window_minutes?: number
-        }
-        Returns: boolean
-      }
-      cleanup_rate_limits: {
+      is_admin: {
         Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      create_missing_profile: {
-        Args: {
-          user_id: string
-          user_email: string
-          user_name?: string
-          btc_wallet?: string
-          usdt_wallet?: string
-        }
-        Returns: undefined
-      }
-      create_profile_for_user: {
-        Args: { user_id: string; user_email: string; user_name?: string }
-        Returns: undefined
-      }
-      log_audit_event: {
-        Args: {
-          p_user_id: string
-          p_action: string
-          p_table_name: string
-          p_record_id?: string
-          p_old_values?: Json
-          p_new_values?: Json
-        }
-        Returns: undefined
-      }
-      update_user_balance: {
-        Args: { user_id: string; amount_change: number }
-        Returns: undefined
-      }
-      update_user_balance_secure: {
-        Args: {
-          user_id: string
-          amount_change: number
-          transaction_type?: string
-        }
         Returns: boolean
+      }
+      uid: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
     }
     Enums: {
