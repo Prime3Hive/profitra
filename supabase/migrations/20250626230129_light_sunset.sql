@@ -1,0 +1,500 @@
+/*
+  # Complete Schema Setup for Investment Platform
+
+  1. New Tables
+    - `profiles` - User profile information with wallet addresses
+    - `investment_plans` - Available investment plans with ROI and duration
+    - `investments` - User investments tracking
+    - `deposits` - Deposit confirmation requests
+    - `deposit_requests` - User deposit requests
+    - `withdrawal_requests` - User withdrawal requests
+    - `transactions` - Transaction history
+    - `admin_settings` - Platform configuration
+    - `audit_logs` - System audit trail
+
+  2. Security
+    - Enable RLS on all tables
+    - Add policies for user data isolation
+    - Add admin access policies
+    - Add profile creation trigger
+
+  3. Functions
+    - Timestamp update functions
+    - User profile creation function
+*/
+
+-- Create extension if not exists
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create timestamp update function
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create updated_at column update function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- PROFILES TABLE
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  btc_wallet TEXT,
+  usdt_wallet TEXT,
+  role TEXT DEFAULT 'user'::TEXT,
+  balance NUMERIC(12,2) DEFAULT 0.00,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT unique_user_id UNIQUE (user_id),
+  CONSTRAINT profiles_role_check CHECK (role = ANY (ARRAY['user'::TEXT, 'admin'::TEXT]))
+);
+
+-- Create trigger for profiles (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_profiles_timestamp'
+  ) THEN
+    CREATE TRIGGER update_profiles_timestamp
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+  END IF;
+END $$;
+
+-- INVESTMENT PLANS TABLE
+CREATE TABLE IF NOT EXISTS public.investment_plans (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  min_amount NUMERIC(12,2) NOT NULL,
+  max_amount NUMERIC(12,2),
+  roi_percent NUMERIC(5,2) NOT NULL,
+  duration_hours INTEGER NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT investment_plans_pkey PRIMARY KEY (id)
+);
+
+-- Create trigger for investment_plans (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_investment_plans_timestamp'
+  ) THEN
+    CREATE TRIGGER update_investment_plans_timestamp
+    BEFORE UPDATE ON public.investment_plans
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+  END IF;
+END $$;
+
+-- INVESTMENTS TABLE
+CREATE TABLE IF NOT EXISTS public.investments (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  plan_id UUID REFERENCES public.investment_plans(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL,
+  roi_amount NUMERIC(12,2) NOT NULL,
+  start_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  status TEXT DEFAULT 'active'::TEXT,
+  is_reinvestment BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT investments_pkey PRIMARY KEY (id),
+  CONSTRAINT investments_status_check CHECK (status = ANY (ARRAY['active'::TEXT, 'completed'::TEXT, 'cancelled'::TEXT]))
+);
+
+-- Create trigger for investments (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_investments_timestamp'
+  ) THEN
+    CREATE TRIGGER update_investments_timestamp
+    BEFORE UPDATE ON public.investments
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+  END IF;
+END $$;
+
+-- DEPOSITS TABLE
+CREATE TABLE IF NOT EXISTS public.deposits (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL,
+  currency TEXT NOT NULL,
+  status TEXT DEFAULT 'pending'::TEXT,
+  request_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  confirmed_date TIMESTAMP WITH TIME ZONE,
+  confirmed_by UUID REFERENCES auth.users(id),
+  transaction_hash TEXT,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT deposits_pkey PRIMARY KEY (id),
+  CONSTRAINT deposits_currency_check CHECK (currency = ANY (ARRAY['BTC'::TEXT, 'USDT'::TEXT])),
+  CONSTRAINT deposits_status_check CHECK (status = ANY (ARRAY['pending'::TEXT, 'confirmed'::TEXT, 'rejected'::TEXT]))
+);
+
+-- Create trigger for deposits (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_deposits_timestamp'
+  ) THEN
+    CREATE TRIGGER update_deposits_timestamp
+    BEFORE UPDATE ON public.deposits
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+  END IF;
+END $$;
+
+-- DEPOSIT REQUESTS TABLE
+CREATE TABLE IF NOT EXISTS public.deposit_requests (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  amount NUMERIC(15,2) NOT NULL,
+  currency TEXT NOT NULL,
+  wallet_address TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'::TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  CONSTRAINT deposit_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT check_deposit_amount_positive CHECK (amount > 0),
+  CONSTRAINT deposit_requests_currency_check CHECK (currency = ANY (ARRAY['BTC'::TEXT, 'USDT'::TEXT])),
+  CONSTRAINT deposit_requests_status_check CHECK (status = ANY (ARRAY['pending'::TEXT, 'confirmed'::TEXT, 'rejected'::TEXT]))
+);
+
+-- Create indexes for deposit_requests
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id ON public.deposit_requests USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON public.deposit_requests USING btree (status);
+
+-- Create trigger for deposit_requests (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_deposit_requests_updated_at'
+  ) THEN
+    CREATE TRIGGER update_deposit_requests_updated_at
+    BEFORE UPDATE ON public.deposit_requests
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
+
+-- WITHDRAWAL REQUESTS TABLE
+CREATE TABLE IF NOT EXISTS public.withdrawal_requests (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  amount NUMERIC(15,2) NOT NULL,
+  currency TEXT NOT NULL,
+  wallet_address TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'::TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  CONSTRAINT withdrawal_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT check_withdrawal_amount_positive CHECK (amount > 0),
+  CONSTRAINT withdrawal_requests_currency_check CHECK (currency = ANY (ARRAY['BTC'::TEXT, 'USDT'::TEXT])),
+  CONSTRAINT withdrawal_requests_status_check CHECK (status = ANY (ARRAY['pending'::TEXT, 'approved'::TEXT, 'completed'::TEXT, 'rejected'::TEXT]))
+);
+
+-- Create indexes for withdrawal_requests
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id ON public.withdrawal_requests USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status ON public.withdrawal_requests USING btree (status);
+
+-- Create trigger for withdrawal_requests (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_withdrawal_requests_updated_at'
+  ) THEN
+    CREATE TRIGGER update_withdrawal_requests_updated_at
+    BEFORE UPDATE ON public.withdrawal_requests
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
+
+-- TRANSACTIONS TABLE
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL,
+  description TEXT NOT NULL,
+  investment_id UUID REFERENCES public.investments(id),
+  deposit_id UUID REFERENCES public.deposits(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT transactions_type_check CHECK (type = ANY (ARRAY['deposit'::TEXT, 'investment'::TEXT, 'roi_return'::TEXT, 'reinvestment'::TEXT, 'withdrawal'::TEXT]))
+);
+
+-- ADMIN SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS public.admin_settings (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  setting_key TEXT NOT NULL UNIQUE,
+  setting_value JSONB NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT admin_settings_pkey PRIMARY KEY (id)
+);
+
+-- Create trigger for admin_settings (with IF NOT EXISTS check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_admin_settings_timestamp'
+  ) THEN
+    CREATE TRIGGER update_admin_settings_timestamp
+    BEFORE UPDATE ON public.admin_settings
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+  END IF;
+END $$;
+
+-- AUDIT LOGS TABLE
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  entity_id UUID,
+  details JSONB,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::TEXT, NOW()),
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
+);
+
+-- Enable Row Level Security on all tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.investment_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.investments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.deposits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.deposit_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Helper function to check if user is admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE user_id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to get current user ID
+CREATE OR REPLACE FUNCTION uid()
+RETURNS UUID AS $$
+BEGIN
+  RETURN auth.uid();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create RLS Policies
+
+-- Profiles policies
+DROP POLICY IF EXISTS "Allow insert for authentication service" ON public.profiles;
+CREATE POLICY "Allow insert for authentication service"
+  ON public.profiles FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+CREATE POLICY "Users can view their own profile"
+  ON public.profiles FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles FOR UPDATE
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
+CREATE POLICY "Admins can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can update all profiles" ON public.profiles;
+CREATE POLICY "Admins can update all profiles"
+  ON public.profiles FOR UPDATE
+  USING (is_admin());
+
+-- Investment plans policies
+DROP POLICY IF EXISTS "Anyone can view active investment plans" ON public.investment_plans;
+CREATE POLICY "Anyone can view active investment plans"
+  ON public.investment_plans FOR SELECT
+  USING ((is_active = true) OR is_admin());
+
+DROP POLICY IF EXISTS "Only admins can modify investment plans" ON public.investment_plans;
+CREATE POLICY "Only admins can modify investment plans"
+  ON public.investment_plans FOR ALL
+  USING (is_admin());
+
+-- Investments policies
+DROP POLICY IF EXISTS "Users can view their own investments" ON public.investments;
+CREATE POLICY "Users can view their own investments"
+  ON public.investments FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own investments" ON public.investments;
+CREATE POLICY "Users can create their own investments"
+  ON public.investments FOR INSERT
+  WITH CHECK (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all investments" ON public.investments;
+CREATE POLICY "Admins can view all investments"
+  ON public.investments FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can modify all investments" ON public.investments;
+CREATE POLICY "Admins can modify all investments"
+  ON public.investments FOR ALL
+  USING (is_admin());
+
+-- Deposits policies
+DROP POLICY IF EXISTS "Users can view their own deposits" ON public.deposits;
+CREATE POLICY "Users can view their own deposits"
+  ON public.deposits FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own deposits" ON public.deposits;
+CREATE POLICY "Users can create their own deposits"
+  ON public.deposits FOR INSERT
+  WITH CHECK (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all deposits" ON public.deposits;
+CREATE POLICY "Admins can view all deposits"
+  ON public.deposits FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can modify all deposits" ON public.deposits;
+CREATE POLICY "Admins can modify all deposits"
+  ON public.deposits FOR ALL
+  USING (is_admin());
+
+-- Deposit requests policies
+DROP POLICY IF EXISTS "Users can view their own deposit requests" ON public.deposit_requests;
+CREATE POLICY "Users can view their own deposit requests"
+  ON public.deposit_requests FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own deposit requests" ON public.deposit_requests;
+CREATE POLICY "Users can create their own deposit requests"
+  ON public.deposit_requests FOR INSERT
+  WITH CHECK (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all deposit requests" ON public.deposit_requests;
+CREATE POLICY "Admins can view all deposit requests"
+  ON public.deposit_requests FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can modify all deposit requests" ON public.deposit_requests;
+CREATE POLICY "Admins can modify all deposit requests"
+  ON public.deposit_requests FOR ALL
+  USING (is_admin());
+
+-- Withdrawal requests policies
+DROP POLICY IF EXISTS "Users can view their own withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Users can view their own withdrawal requests"
+  ON public.withdrawal_requests FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Users can create their own withdrawal requests"
+  ON public.withdrawal_requests FOR INSERT
+  WITH CHECK (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Admins can view all withdrawal requests"
+  ON public.withdrawal_requests FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can modify all withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Admins can modify all withdrawal requests"
+  ON public.withdrawal_requests FOR ALL
+  USING (is_admin());
+
+-- Transactions policies
+DROP POLICY IF EXISTS "Users can view their own transactions" ON public.transactions;
+CREATE POLICY "Users can view their own transactions"
+  ON public.transactions FOR SELECT
+  USING (uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own transactions" ON public.transactions;
+CREATE POLICY "Users can create their own transactions"
+  ON public.transactions FOR INSERT
+  WITH CHECK (uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all transactions" ON public.transactions;
+CREATE POLICY "Admins can view all transactions"
+  ON public.transactions FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can modify all transactions" ON public.transactions;
+CREATE POLICY "Admins can modify all transactions"
+  ON public.transactions FOR ALL
+  USING (is_admin());
+
+-- Admin settings policies
+DROP POLICY IF EXISTS "Only admins can view admin settings" ON public.admin_settings;
+CREATE POLICY "Only admins can view admin settings"
+  ON public.admin_settings FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Only admins can modify admin settings" ON public.admin_settings;
+CREATE POLICY "Only admins can modify admin settings"
+  ON public.admin_settings FOR ALL
+  USING (is_admin());
+
+-- Audit logs policies
+DROP POLICY IF EXISTS "Only admins can view audit logs" ON public.audit_logs;
+CREATE POLICY "Only admins can view audit logs"
+  ON public.audit_logs FOR SELECT
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Only admins can create audit logs" ON public.audit_logs;
+CREATE POLICY "Only admins can create audit logs"
+  ON public.audit_logs FOR INSERT
+  WITH CHECK (is_admin());
+
+-- Create profile on user signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (user_id, name, role, balance)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', 'New User'), 'user', 0);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to create profile on signup (with IF NOT EXISTS check)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Create sample investment plans (only if they don't exist)
+INSERT INTO public.investment_plans (name, min_amount, max_amount, roi_percent, duration_hours, is_active)
+SELECT 'Starter Plan', 100, 1000, 5.00, 24, true
+WHERE NOT EXISTS (SELECT 1 FROM public.investment_plans WHERE name = 'Starter Plan');
+
+INSERT INTO public.investment_plans (name, min_amount, max_amount, roi_percent, duration_hours, is_active)
+SELECT 'Growth Plan', 1000, 5000, 7.50, 48, true
+WHERE NOT EXISTS (SELECT 1 FROM public.investment_plans WHERE name = 'Growth Plan');
+
+INSERT INTO public.investment_plans (name, min_amount, max_amount, roi_percent, duration_hours, is_active)
+SELECT 'Premium Plan', 5000, 20000, 10.00, 72, true
+WHERE NOT EXISTS (SELECT 1 FROM public.investment_plans WHERE name = 'Premium Plan');
+
+INSERT INTO public.investment_plans (name, min_amount, max_amount, roi_percent, duration_hours, is_active)
+SELECT 'Elite Plan', 20000, NULL, 15.00, 120, true
+WHERE NOT EXISTS (SELECT 1 FROM public.investment_plans WHERE name = 'Elite Plan');
