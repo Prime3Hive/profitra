@@ -1,17 +1,19 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
 interface Profile {
   id: string;
-  user_id: string; // Added explicit user_id property
+  user_id: string;
   name: string;
   btc_wallet: string;
   usdt_wallet: string;
-  role: string; // Changed from is_admin: boolean to role: string
+  role: string;
   balance: number;
   created_at: string;
+  updated_at: string;
 }
 
 interface AuthContextType {
@@ -84,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext: Safety timeout reached, forcing loading to false');
         setLoading(false);
       }
-    }, 5000); // 5 second safety timeout
+    }, 5000);
 
     return () => {
       console.log('AuthContext: Cleaning up');
@@ -97,37 +99,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchProfile = async (userId: string) => {
     console.log('AuthContext: Fetching profile for user ID:', userId);
     try {
-      // Create a default profile if none exists
-      const createDefaultProfile = async () => {
-        console.log('AuthContext: Creating default profile for user');
-        try {
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              user_id: userId, 
-              name: 'New User',
-              role: 'user',
-              balance: 0,
-              btc_wallet: '',
-              usdt_wallet: ''
-            })
-            .select()
-            .single();
-
-          if (createError) {
-            console.error('AuthContext: Error creating default profile:', createError);
-            return null;
-          }
-
-          console.log('AuthContext: Default profile created:', newProfile);
-          return newProfile;
-        } catch (error) {
-          console.error('AuthContext: Error in createDefaultProfile:', error);
-          return null;
-        }
-      };
-
-      // First try to get the existing profile
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -137,15 +108,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         if (error.code === 'PGRST116') { 
           console.log('AuthContext: No profile found, creating default profile');
-          const newProfile = await createDefaultProfile();
-          if (newProfile) {
-            console.log('AuthContext: Setting profile from newly created default');
-            setProfile(newProfile);
-          } else {
-            console.error('AuthContext: Failed to create default profile');
-          }
+          await createDefaultProfile(userId);
         } else {
           console.error('AuthContext: Error fetching profile:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load user profile. Please try refreshing the page.",
+            variant: "destructive",
+          });
         }
         setLoading(false);
         return;
@@ -154,25 +124,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profile) {
         console.log('AuthContext: Profile found:', profile);
         setProfile(profile);
-      } else {
-        console.log('AuthContext: No profile found despite no error, creating default profile');
-        const newProfile = await createDefaultProfile();
-        if (newProfile) {
-          console.log('AuthContext: Setting profile from newly created default');
-          setProfile(newProfile);
-        }
       }
     } catch (error) {
       console.error('AuthContext: Error in fetchProfile:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load user profile. Please try refreshing the page.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createDefaultProfile = async (userId: string) => {
+    console.log('AuthContext: Creating default profile for user');
+    try {
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert({
+          user_id: userId, 
+          name: 'New User',
+          role: 'user',
+          balance: 0,
+          btc_wallet: '',
+          usdt_wallet: ''
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('AuthContext: Error creating default profile:', createError);
+        toast({
+          title: "Error",
+          description: "Failed to create user profile. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('AuthContext: Default profile created:', newProfile);
+      setProfile(newProfile);
+    } catch (error) {
+      console.error('AuthContext: Error in createDefaultProfile:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create user profile. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
     try {
       console.log('AuthContext: Signing up new user with email:', email);
-      // First, sign up the user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -192,32 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (authData.user) {
-        console.log('AuthContext: User created successfully, creating profile for user ID:', authData.user.id);
-        // Create profile manually if needed (as backup to the trigger)
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              user_id: authData.user.id, // Use user_id instead of id
-              name,
-              btc_wallet: btcWallet,
-              usdt_wallet: usdtWallet,
-              role: 'user', // Changed from is_admin: false to role: 'user'
-              balance: 0,
-            },
-          ]);
-
-        // Ignore conflict errors as the trigger might have already created the profile
-        if (profileError) {
-          if (profileError.message.includes('duplicate key')) {
-            console.log('AuthContext: Profile already exists (likely created by trigger)');
-          } else {
-            console.error('AuthContext: Profile creation error:', profileError);
-          }
-        } else {
-          console.log('AuthContext: Profile created successfully');
-        }
-
+        console.log('AuthContext: User created successfully');
         toast({
           title: "Success",
           description: "Account created successfully! Please check your email to verify your account.",

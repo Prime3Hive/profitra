@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +29,7 @@ interface InvestmentPlan {
   name: string;
   min_amount: number;
   max_amount: number;
-  roi: number;
+  roi_percent: number;
   duration_hours: number;
   is_active: boolean;
 }
@@ -39,7 +38,7 @@ interface Investment {
   id: string;
   plan_id: string;
   amount: number;
-  roi: number;
+  roi_amount: number;
   start_date: string;
   end_date: string;
   status: string;
@@ -55,7 +54,7 @@ interface Transaction {
 }
 
 const Dashboard: React.FC = () => {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -73,12 +72,12 @@ const Dashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (!profile?.id) {
-        console.error('Dashboard: No profile ID available for fetching data');
+      if (!user?.id) {
+        console.error('Dashboard: No user ID available for fetching data');
         return;
       }
       
-      console.log('Dashboard: Fetching data for user ID:', profile.id);
+      console.log('Dashboard: Fetching data for user ID:', user.id);
       
       // Fetch investment plans
       const { data: plansData, error: plansError } = await supabase
@@ -101,7 +100,7 @@ const Dashboard: React.FC = () => {
           *,
           plan:investment_plans(*)
         `)
-        .eq('user_id', profile.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (investmentsError) {
@@ -115,7 +114,7 @@ const Dashboard: React.FC = () => {
       const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', profile.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -161,7 +160,7 @@ const Dashboard: React.FC = () => {
 
   const activeInvestments = investments.filter(inv => inv.status === 'active');
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
-  const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi, 0);
+  const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi_amount, 0);
 
   if (loading) {
     return (
@@ -272,7 +271,7 @@ const Dashboard: React.FC = () => {
                   <CardHeader>
                     <CardTitle className="flex justify-between items-center">
                       {plan.name}
-                      <Badge variant="secondary">{plan.roi}% ROI</Badge>
+                      <Badge variant="secondary">{plan.roi_percent}% ROI</Badge>
                     </CardTitle>
                     <CardDescription>
                       ${plan.min_amount.toLocaleString()} - {plan.max_amount ? `$${plan.max_amount.toLocaleString()}` : 'Unlimited'}
@@ -321,7 +320,7 @@ const Dashboard: React.FC = () => {
                         <Badge variant="default">Investment</Badge>
                       </CardTitle>
                       <CardDescription>
-                        Invested: ${investment.amount.toFixed(2)} • Expected: ${investment.roi.toFixed(2)}
+                        Invested: ${investment.amount.toFixed(2)} • Expected: ${investment.roi_amount.toFixed(2)}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -331,7 +330,7 @@ const Dashboard: React.FC = () => {
                           {getTimeRemaining(investment.end_date)}
                         </div>
                         <div className="text-lg font-semibold text-green-600">
-                          +{investment.plan?.roi}%
+                          +{investment.plan?.roi_percent}%
                         </div>
                       </div>
                     </CardContent>
