@@ -42,7 +42,7 @@ const Debug: React.FC = () => {
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('user_id', session.user.id) // Changed from eq('id', session.user.id) to eq('user_id', session.user.id)
+            .eq('user_id', session.user.id)
             .single();
             
           if (profileError) {
@@ -66,23 +66,7 @@ const Debug: React.FC = () => {
     // Test Supabase connection
     const testSupabase = async () => {
       try {
-        // First check if profiles table exists
-        const { data: tablesData, error: tablesError } = await supabase
-          .from('information_schema.tables')
-          .select('table_name')
-          .eq('table_schema', 'public')
-          .eq('table_name', 'profiles');
-          
-        if (tablesError) {
-          console.error('Table check error:', tablesError);
-          setProfilesTableExists(null);
-        } else {
-          const exists = tablesData && tablesData.length > 0;
-          console.log('Profiles table exists:', exists);
-          setProfilesTableExists(exists);
-        }
-        
-        // Now try to query profiles
+        // Try to query profiles table directly instead of information_schema
         const { data, error } = await supabase
           .from('profiles')
           .select('count')
@@ -91,13 +75,16 @@ const Debug: React.FC = () => {
         if (error) {
           console.error('Supabase connection error:', error);
           setSupabaseStatus(`Error: ${error.message}`);
+          setProfilesTableExists(false);
         } else {
           console.log('Supabase connection successful:', data);
           setSupabaseStatus('Connected successfully');
+          setProfilesTableExists(true);
         }
       } catch (err) {
         console.error('Unexpected error testing Supabase:', err);
         setSupabaseStatus(`Unexpected error: ${String(err)}`);
+        setProfilesTableExists(false);
       }
     };
 

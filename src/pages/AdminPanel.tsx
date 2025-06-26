@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -35,7 +36,7 @@ interface Deposit {
   currency: string;
   status: string;
   request_date: string;
-  profiles: { name: string };
+  profiles: { name: string } | null;
 }
 
 interface Investment {
@@ -46,8 +47,8 @@ interface Investment {
   status: string;
   start_date: string;
   end_date: string;
-  profiles: { name: string };
-  plan?: { name: string };
+  profiles: { name: string } | null;
+  investment_plans: { name: string } | null;
 }
 
 const AdminPanel: React.FC = () => {
@@ -90,32 +91,41 @@ const AdminPanel: React.FC = () => {
         .from('deposits')
         .select(`
           *,
-          profiles!inner(name)
+          profiles(name)
         `)
         .eq('status', 'pending')
         .order('request_date', { ascending: false });
 
       if (depositsError) throw depositsError;
-      setDeposits(depositsData || []);
+      const formattedDeposits = (depositsData || []).map(deposit => ({
+        ...deposit,
+        profiles: deposit.profiles as { name: string } | null
+      }));
+      setDeposits(formattedDeposits);
 
       // Fetch all investments with user names and plan details
       const { data: investmentsData, error: investmentsError } = await supabase
         .from('investments')
         .select(`
           *,
-          profiles!inner(name),
+          profiles(name),
           investment_plans(name)
         `)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (investmentsError) throw investmentsError;
-      setInvestments(investmentsData || []);
+      const formattedInvestments = (investmentsData || []).map(investment => ({
+        ...investment,
+        profiles: investment.profiles as { name: string } | null,
+        investment_plans: investment.investment_plans as { name: string } | null
+      }));
+      setInvestments(formattedInvestments);
 
       // Calculate stats
-      const totalVolume = investmentsData?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
-      const activeInvestments = investmentsData?.filter(inv => inv.status === 'active').length || 0;
-      const totalDeposits = depositsData?.reduce((sum, dep) => sum + dep.amount, 0) || 0;
+      const totalVolume = formattedInvestments?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
+      const activeInvestments = formattedInvestments?.filter(inv => inv.status === 'active').length || 0;
+      const totalDeposits = formattedDeposits?.reduce((sum, dep) => sum + dep.amount, 0) || 0;
 
       setStats({
         totalUsers: usersData?.length || 0,
@@ -144,32 +154,24 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'confirmed',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.user_id // Changed from profile?.id to profile?.user_id
+          confirmed_by: profile?.user_id
         })
         .eq('id', depositId);
 
       if (depositError) throw depositError;
 
-      // Update user balance
-      const { error: balanceError } = await supabase.rpc('increment_user_balance', {
-        user_id: userId,
-        amount: amount
-      });
+      // Update user balance directly
+      const { data: currentUser } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('user_id', userId)
+        .single();
 
-      if (balanceError) {
-        // If RPC doesn't exist, use direct update
-        const { data: currentUser } = await supabase
+      if (currentUser) {
+        await supabase
           .from('profiles')
-          .select('balance')
-          .eq('id', userId)
-          .single();
-
-        if (currentUser) {
-          await supabase
-            .from('profiles')
-            .update({ balance: currentUser.balance + amount })
-            .eq('id', userId);
-        }
+          .update({ balance: (currentUser.balance || 0) + amount })
+          .eq('user_id', userId);
       }
 
       toast({
@@ -194,7 +196,7 @@ const AdminPanel: React.FC = () => {
         .update({ 
           status: 'rejected',
           confirmed_date: new Date().toISOString(),
-          confirmed_by: profile?.user_id // Changed from profile?.id to profile?.user_id
+          confirmed_by: profile?.user_id
         })
         .eq('id', depositId);
 
@@ -365,7 +367,7 @@ const AdminPanel: React.FC = () => {
                     {deposits.map((deposit) => (
                       <div key={deposit.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex-1">
-                          <h4 className="font-medium">{deposit.profiles.name}</h4>
+                          <h4 className="font-medium">{deposit.profiles?.name || 'Unknown User'}</h4>
                           <p className="text-sm text-gray-600">
                             ${deposit.amount.toFixed(2)} via {deposit.currency}
                           </p>

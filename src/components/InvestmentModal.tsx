@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -20,7 +21,7 @@ interface InvestmentPlan {
   name: string;
   min_amount: number;
   max_amount: number;
-  roi: number;
+  roi_percent: number;
   duration_hours: number;
 }
 
@@ -40,7 +41,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
   if (!plan) return null;
 
   const amountNum = parseFloat(amount) || 0;
-  const roiAmount = (amountNum * plan.roi) / 100;
+  const roiAmount = (amountNum * plan.roi_percent) / 100;
   const totalReturn = amountNum + roiAmount;
 
   const handleInvest = async () => {
@@ -81,17 +82,16 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
       // Create investment record
       const { data: investment, error: investmentError } = await supabase
         .from('investments')
-        .insert([
-          {
-            user_id: profile.user_id, // Changed from profile.id to profile.user_id
-            plan_id: plan.id,
-            amount: amountNum,
-            roi: roiAmount,
-            start_date: startDate.toISOString(),
-            end_date: endDate.toISOString(),
-            status: 'active',
-          },
-        ])
+        .insert({
+          user_id: profile.user_id,
+          plan_id: plan.id,
+          amount: amountNum,
+          roi_amount: roiAmount,
+          start_date: startDate.toISOString(),
+          end_date: endDate.toISOString(),
+          status: 'active',
+          is_reinvestment: isReinvestment,
+        })
         .select()
         .single();
 
@@ -108,15 +108,12 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
       // Create transaction record
       await supabase
         .from('transactions')
-        .insert([
-          {
-            user_id: profile.user_id, // Changed from profile.id to profile.user_id
-            type: isReinvestment ? 'reinvestment' : 'investment',
-            amount: -amountNum,
-            status: 'completed',
-            description: `${plan.name} ${isReinvestment ? 'reinvestment' : 'investment'} - $${amountNum}`,
-          },
-        ]);
+        .insert({
+          user_id: profile.user_id,
+          type: isReinvestment ? 'reinvestment' : 'investment',
+          amount: -amountNum,
+          description: `${plan.name} ${isReinvestment ? 'reinvestment' : 'investment'} - $${amountNum}`,
+        });
 
       toast({
         title: "Investment Successful!",
@@ -161,7 +158,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">ROI:</span>
-              <Badge variant="secondary">{plan.roi}%</Badge>
+              <Badge variant="secondary">{plan.roi_percent}%</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Duration:</span>
@@ -217,7 +214,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
                   <span>${amountNum.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>ROI ({plan.roi}%):</span>
+                  <span>ROI ({plan.roi_percent}%):</span>
                   <span className="text-green-600">+${roiAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-medium border-t pt-1">
