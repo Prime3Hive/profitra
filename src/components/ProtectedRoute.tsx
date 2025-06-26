@@ -12,40 +12,17 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, adminOnly = false }) => {
   const { user, profile, loading } = useAuth();
   const location = useLocation();
-  const [loadingTimeout, setLoadingTimeout] = React.useState(false);
-  const [timeoutDuration] = React.useState(5000); // Reduced to 5 seconds
 
   console.log('ProtectedRoute: Render state', { 
     loading, 
-    loadingTimeout, 
     hasUser: !!user, 
     hasProfile: !!profile,
     profileRole: profile?.role,
     adminOnly
   });
 
-  // Set a timeout to prevent infinite loading
-  React.useEffect(() => {
-    console.log('ProtectedRoute: Loading state changed:', loading);
-    if (loading) {
-      console.log(`ProtectedRoute: Setting ${timeoutDuration}ms timeout`);
-      const timer = setTimeout(() => {
-        console.log('ProtectedRoute: Loading timeout reached');
-        setLoadingTimeout(true);
-      }, timeoutDuration);
-      return () => {
-        console.log('ProtectedRoute: Clearing timeout');
-        clearTimeout(timer);
-      };
-    } else if (!loading && loadingTimeout) {
-      // Reset timeout if loading completes
-      console.log('ProtectedRoute: Loading completed, resetting timeout');
-      setLoadingTimeout(false);
-    }
-  }, [loading, timeoutDuration]);
-
-  // If we're still loading but not timed out, show the spinner
-  if (loading && !loadingTimeout) {
+  // If we're still loading, show the spinner (with reduced timeout handled in AuthContext)
+  if (loading) {
     console.log('ProtectedRoute: Showing loading spinner');
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -57,14 +34,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, adminOnly = f
     );
   }
   
-  // If loading timed out or there's no user, redirect to signin
-  if (loadingTimeout || !user) {
-    console.log('ProtectedRoute: Redirecting to signin: timeout =', loadingTimeout, 'no user =', !user);
+  // If there's no user, redirect to signin
+  if (!user) {
+    console.log('ProtectedRoute: No user, redirecting to signin');
     return <Navigate to="/signin" state={{ from: location }} replace />;
   }
 
   // For admin routes, check if profile exists and has admin role
-  // If profile doesn't exist yet but user does, proceed anyway (non-admin routes only)
   if (adminOnly) {
     if (!profile) {
       console.log('ProtectedRoute: No profile for admin check, redirecting to dashboard');
@@ -77,6 +53,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, adminOnly = f
     }
   }
 
+  // For non-admin routes, allow access even if profile is still loading
+  // The user is authenticated, that's what matters for basic access
   console.log('ProtectedRoute: Rendering protected content');
   return <>{children}</>;
 };

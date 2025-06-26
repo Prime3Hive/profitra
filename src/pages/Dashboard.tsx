@@ -66,17 +66,20 @@ const Dashboard: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<InvestmentPlan | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user?.id) {
+      fetchData();
+    }
+  }, [user?.id]);
 
   const fetchData = async () => {
+    if (!user?.id) {
+      console.error('Dashboard: No user ID available for fetching data');
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     try {
-      if (!user?.id) {
-        console.error('Dashboard: No user ID available for fetching data');
-        return;
-      }
-      
       console.log('Dashboard: Fetching data for user ID:', user.id);
       
       // Fetch investment plans
@@ -88,10 +91,10 @@ const Dashboard: React.FC = () => {
 
       if (plansError) {
         console.error('Dashboard: Error fetching investment plans:', plansError);
-        throw plansError;
+      } else {
+        console.log('Dashboard: Fetched plans:', plansData?.length || 0);
+        setPlans(plansData || []);
       }
-      console.log('Dashboard: Fetched plans:', plansData?.length || 0);
-      setPlans(plansData || []);
 
       // Fetch user investments
       const { data: investmentsData, error: investmentsError } = await supabase
@@ -105,10 +108,10 @@ const Dashboard: React.FC = () => {
 
       if (investmentsError) {
         console.error('Dashboard: Error fetching investments:', investmentsError);
-        throw investmentsError;
+      } else {
+        console.log('Dashboard: Fetched investments:', investmentsData?.length || 0);
+        setInvestments(investmentsData || []);
       }
-      console.log('Dashboard: Fetched investments:', investmentsData?.length || 0);
-      setInvestments(investmentsData || []);
 
       // Fetch user transactions
       const { data: transactionsData, error: transactionsError } = await supabase
@@ -120,10 +123,10 @@ const Dashboard: React.FC = () => {
 
       if (transactionsError) {
         console.error('Dashboard: Error fetching transactions:', transactionsError);
-        throw transactionsError;
+      } else {
+        console.log('Dashboard: Fetched transactions:', transactionsData?.length || 0);
+        setTransactions(transactionsData || []);
       }
-      console.log('Dashboard: Fetched transactions:', transactionsData?.length || 0);
-      setTransactions(transactionsData || []);
 
     } catch (error) {
       console.error('Dashboard: Error fetching data:', error);
@@ -162,7 +165,8 @@ const Dashboard: React.FC = () => {
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
   const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi_amount, 0);
 
-  if (loading) {
+  // Show loading state while user is being authenticated or data is being fetched
+  if (!user || loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
@@ -188,7 +192,7 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {profile?.name}!</p>
+          <p className="text-gray-600">Welcome back, {profile?.name || 'User'}!</p>
         </div>
 
         {/* Stats Cards */}
@@ -316,7 +320,7 @@ const Dashboard: React.FC = () => {
                   <Card key={investment.id}>
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
-                        {investment.plan?.name}
+                        {investment.plan?.name || 'Investment Plan'}
                         <Badge variant="default">Investment</Badge>
                       </CardTitle>
                       <CardDescription>
@@ -330,7 +334,7 @@ const Dashboard: React.FC = () => {
                           {getTimeRemaining(investment.end_date)}
                         </div>
                         <div className="text-lg font-semibold text-green-600">
-                          +{investment.plan?.roi_percent}%
+                          +{investment.plan?.roi_percent || 0}%
                         </div>
                       </div>
                     </CardContent>
