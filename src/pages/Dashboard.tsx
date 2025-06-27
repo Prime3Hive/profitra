@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +39,9 @@ interface Investment {
   start_date: string;
   end_date: string;
   status: string;
-  plan?: InvestmentPlan;
+  plan_name?: string;
+  roi_percent?: number;
+  duration_hours?: number;
 }
 
 interface Transaction {
@@ -52,7 +53,7 @@ interface Transaction {
 }
 
 const Dashboard: React.FC = () => {
-  const { profile, user, refreshProfile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshProfile } = useAuth();
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -64,85 +65,52 @@ const Dashboard: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<InvestmentPlan | null>(null);
 
   useEffect(() => {
-    if (user?.id && !authLoading) {
+    if (user && !authLoading) {
       fetchData();
     }
-  }, [user?.id, authLoading]);
+  }, [user, authLoading]);
 
   const fetchData = async () => {
-    if (!user?.id) {
-      console.error('Dashboard: No user ID available for fetching data');
+    if (!user) {
+      console.error('Dashboard: No user available for fetching data');
       setLoading(false);
       return;
     }
     
     setLoading(true);
     try {
-      console.log('Dashboard: Fetching data for user ID:', user.id);
+      console.log('Dashboard: Fetching data for user:', user.id);
       
       // Fetch investment plans
-      const { data: plansData, error: plansError } = await supabase
-        .from('investment_plans')
-        .select('*')
-        .eq('is_active', true)
-        .order('min_amount');
-
-      if (plansError) {
-        console.error('Dashboard: Error fetching investment plans:', plansError);
+      try {
+        const plansData = await apiClient.getInvestmentPlans();
+        console.log('Dashboard: Fetched plans:', plansData?.length || 0);
+        setPlans(plansData || []);
+      } catch (error) {
+        console.error('Dashboard: Error fetching investment plans:', error);
         toast({
           title: "Warning",
           description: "Could not load investment plans",
           variant: "destructive",
         });
-      } else {
-        console.log('Dashboard: Fetched plans:', plansData?.length || 0);
-        setPlans(plansData || []);
       }
 
-      // Fetch user investments with plan details
-      const { data: investmentsData, error: investmentsError } = await supabase
-        .from('investments')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (investmentsError) {
-        console.error('Dashboard: Error fetching investments:', investmentsError);
-      } else {
+      // Fetch user investments
+      try {
+        const investmentsData = await apiClient.getInvestments();
         console.log('Dashboard: Fetched investments:', investmentsData?.length || 0);
-        
-        // Fetch plan details for each investment
-        const investmentsWithPlans = await Promise.all(
-          (investmentsData || []).map(async (investment) => {
-            if (investment.plan_id) {
-              const { data: planData } = await supabase
-                .from('investment_plans')
-                .select('*')
-                .eq('id', investment.plan_id)
-                .single();
-              
-              return { ...investment, plan: planData };
-            }
-            return investment;
-          })
-        );
-        
-        setInvestments(investmentsWithPlans);
+        setInvestments(investmentsData || []);
+      } catch (error) {
+        console.error('Dashboard: Error fetching investments:', error);
       }
 
       // Fetch user transactions
-      const { data: transactionsData, error: transactionsError } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (transactionsError) {
-        console.error('Dashboard: Error fetching transactions:', transactionsError);
-      } else {
+      try {
+        const transactionsData = await apiClient.getTransactions();
         console.log('Dashboard: Fetched transactions:', transactionsData?.length || 0);
         setTransactions(transactionsData || []);
+      } catch (error) {
+        console.error('Dashboard: Error fetching transactions:', error);
       }
 
     } catch (error) {
@@ -209,7 +177,7 @@ const Dashboard: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">
-            Welcome back, {profile?.name || user?.email || 'User'}!
+            Welcome back, {user?.name || user?.email || 'User'}!
           </p>
         </div>
 
@@ -221,7 +189,7 @@ const Dashboard: React.FC = () => {
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${profile?.balance?.toFixed(2) || '0.00'}</div>
+              <div className="text-2xl font-bold">${user?.balance?.toFixed(2) || '0.00'}</div>
               <Button 
                 size="sm" 
                 className="mt-2 w-full"
@@ -265,7 +233,7 @@ const Dashboard: React.FC = () => {
               <User className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-sm font-medium">{profile?.role || 'User'}</div>
+              <div className="text-sm font-medium">{user?.role || 'User'}</div>
               <Button 
                 size="sm" 
                 variant="outline" 
@@ -315,9 +283,9 @@ const Dashboard: React.FC = () => {
                       <Button 
                         className="w-full" 
                         onClick={() => handleInvest(plan)}
-                        disabled={!profile?.balance || profile.balance < plan.min_amount}
+                        disabled={!user?.balance || user.balance < plan.min_amount}
                       >
-                        {!profile?.balance || profile.balance < plan.min_amount 
+                        {!user?.balance || user.balance < plan.min_amount 
                           ? 'Insufficient Balance' 
                           : 'Invest Now'
                         }
@@ -348,7 +316,7 @@ const Dashboard: React.FC = () => {
                   <Card key={investment.id}>
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
-                        {investment.plan?.name || 'Investment Plan'}
+                        {investment.plan_name || 'Investment Plan'}
                         <Badge variant="default">Active</Badge>
                       </CardTitle>
                       <CardDescription>
@@ -362,7 +330,7 @@ const Dashboard: React.FC = () => {
                           {getTimeRemaining(investment.end_date)}
                         </div>
                         <div className="text-lg font-semibold text-green-600">
-                          +{investment.plan?.roi_percent || 0}%
+                          +{investment.roi_percent || 0}%
                         </div>
                       </div>
                     </CardContent>
