@@ -28,17 +28,29 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Network error' }));
-      throw new Error(error.error || 'Request failed');
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      console.log(`API Response: ${response.status} ${response.statusText}`);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Network error' }));
+        console.error('API Error:', error);
+        throw new Error(error.error || 'Request failed');
+      }
+
+      const data = await response.json();
+      console.log('API Success:', data);
+      return data;
+    } catch (error) {
+      console.error('API Request failed:', error);
+      throw error;
     }
-
-    return response.json();
   }
 
   // Auth endpoints

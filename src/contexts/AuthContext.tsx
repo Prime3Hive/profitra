@@ -51,7 +51,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      console.log('AuthContext: Attempting signin for:', email);
+      
       const response = await apiClient.signIn({ email, password });
+      console.log('AuthContext: Signin response received:', response);
       
       apiClient.setToken(response.token);
       setUser(response.user);
@@ -61,9 +64,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "You have successfully signed in.",
       });
     } catch (error: any) {
+      console.error('AuthContext: Signin error:', error);
       toast({
         title: "Sign In Failed",
-        description: error.message,
+        description: error.message || "Please check your email and password",
         variant: "destructive",
       });
       throw error;
@@ -75,6 +79,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
     try {
       setLoading(true);
+      console.log('AuthContext: Attempting signup for:', email);
+      
       const response = await apiClient.signUp({
         email,
         password,
@@ -91,9 +97,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Welcome to InvestPro!",
       });
     } catch (error: any) {
+      console.error('AuthContext: Signup error:', error);
       toast({
         title: "Sign Up Failed",
-        description: error.message,
+        description: error.message || "Failed to create account",
         variant: "destructive",
       });
       throw error;
@@ -163,14 +170,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       try {
+        console.log('AuthContext: Initializing authentication...');
         const token = localStorage.getItem('auth_token');
         if (token) {
+          console.log('AuthContext: Token found, verifying...');
           apiClient.setToken(token);
           const response = await apiClient.getCurrentUser();
+          console.log('AuthContext: User verified:', response.user.email);
           setUser(response.user);
+        } else {
+          console.log('AuthContext: No token found');
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('AuthContext: Auth initialization error:', error);
         apiClient.clearToken();
       } finally {
         setLoading(false);

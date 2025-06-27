@@ -12,15 +12,20 @@ router.post('/signup', async (req, res) => {
   try {
     const { email, password, name, btcWallet, usdtWallet } = req.body;
 
+    console.log('Signup attempt for:', email);
+
     // Check if user exists
     const existingUser = await db.getAsync('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser) {
+      console.log('User already exists:', email);
       return res.status(400).json({ error: 'User already exists' });
     }
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
+
+    console.log('Creating user with ID:', userId);
 
     // Create user
     await db.runAsync(`
@@ -32,8 +37,9 @@ router.post('/signup', async (req, res) => {
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
 
     // Get user data
-    const user = await db.getAsync('SELECT id, email, name, role, balance FROM users WHERE id = ?', [userId]);
+    const user = await db.getAsync('SELECT id, email, name, role, balance, btc_wallet, usdt_wallet FROM users WHERE id = ?', [userId]);
 
+    console.log('User created successfully:', user.email);
     res.status(201).json({ token, user });
   } catch (error) {
     console.error('Signup error:', error);
@@ -46,23 +52,33 @@ router.post('/signin', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('Signin attempt for:', email);
+
     // Get user
     const user = await db.getAsync('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      console.log('User not found:', email);
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    console.log('User found, checking password...');
 
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      console.log('Invalid password for user:', email);
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    console.log('Password valid, generating token...');
 
     // Generate token
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
     // Return user data (without password)
     const { password_hash, ...userData } = user;
+    
+    console.log('Signin successful for:', email);
     res.json({ token, user: userData });
   } catch (error) {
     console.error('Signin error:', error);
