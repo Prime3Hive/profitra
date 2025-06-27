@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -20,11 +19,11 @@ interface ProfileModalProps {
 }
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { profile, updateProfile } = useAuth();
+  const { user, updateProfile } = useAuth();
   const [formData, setFormData] = useState({
-    name: profile?.name || '',
-    btc_wallet: profile?.btc_wallet || '',
-    usdt_wallet: profile?.usdt_wallet || '',
+    name: user?.name || '',
+    btc_wallet: user?.btc_wallet || '',
+    usdt_wallet: user?.usdt_wallet || '',
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -76,9 +75,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onSuccess 
 
   const handleClose = () => {
     setFormData({
-      name: profile?.name || '',
-      btc_wallet: profile?.btc_wallet || '',
-      usdt_wallet: profile?.usdt_wallet || '',
+      name: user?.name || '',
+      btc_wallet: user?.btc_wallet || '',
+      usdt_wallet: user?.usdt_wallet || '',
     });
     setErrors({});
     onClose();

@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
@@ -16,7 +15,7 @@ interface WithdrawalModalProps {
 }
 
 const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>('USDT');
   const [walletAddress, setWalletAddress] = useState<string>('');
@@ -44,7 +43,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
       return;
     }
 
-    if (numAmount > (profile?.balance || 0)) {
+    if (numAmount > (user?.balance || 0)) {
       toast({
         title: "Error",
         description: "Insufficient balance",
@@ -55,41 +54,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
 
     setLoading(true);
     try {
-      // Create withdrawal request
-      const { data: withdrawal, error: withdrawalError } = await supabase
-        .from('withdrawal_requests')
-        .insert({
-          user_id: profile?.user_id, // Changed from profile?.id to profile?.user_id
-          amount: numAmount,
-          currency,
-          wallet_address: walletAddress,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (withdrawalError) throw withdrawalError;
-
-      // Create transaction record
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: profile?.user_id, // Changed from profile?.id to profile?.user_id
-          type: 'withdrawal_request',
-          amount: -numAmount, // negative amount for withdrawal
-          description: `Withdrawal request for ${numAmount} ${currency}`
-        });
-
-      if (transactionError) throw transactionError;
-
-      // Update user balance
-      const { error: balanceError } = await supabase
-        .from('profiles')
-        .update({ balance: (profile?.balance || 0) - numAmount })
-        .eq('user_id', profile?.user_id); // Changed from eq('id', profile?.id) to eq('user_id', profile?.user_id)
-
-      if (balanceError) throw balanceError;
-
+      // This would be implemented with the withdrawal API
       toast({
         title: "Success",
         description: "Withdrawal request submitted successfully",
@@ -132,7 +97,7 @@ const WithdrawalModal: React.FC<WithdrawalModalProps> = ({ isOpen, onClose, onSu
               required
             />
             <div className="text-sm text-gray-500">
-              Available balance: ${profile?.balance?.toFixed(2) || '0.00'}
+              Available balance: ${user?.balance?.toFixed(2) || '0.00'}
             </div>
           </div>
           

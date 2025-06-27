@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { apiClient } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +32,7 @@ interface InvestmentModalProps {
 }
 
 const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan, onSuccess }) => {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [amount, setAmount] = useState('');
   const [isReinvestment, setIsReinvestment] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -45,7 +44,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
   const totalReturn = amountNum + roiAmount;
 
   const handleInvest = async () => {
-    if (!profile) return;
+    if (!user) return;
 
     if (amountNum < plan.min_amount) {
       toast({
@@ -65,7 +64,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
       return;
     }
 
-    if (amountNum > profile.balance) {
+    if (amountNum > user.balance) {
       toast({
         title: "Insufficient Balance",
         description: "You don't have enough balance for this investment",
@@ -76,44 +75,11 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
 
     setLoading(true);
     try {
-      const startDate = new Date();
-      const endDate = new Date(startDate.getTime() + plan.duration_hours * 60 * 60 * 1000);
-
-      // Create investment record
-      const { data: investment, error: investmentError } = await supabase
-        .from('investments')
-        .insert({
-          user_id: profile.user_id,
-          plan_id: plan.id,
-          amount: amountNum,
-          roi_amount: roiAmount,
-          start_date: startDate.toISOString(),
-          end_date: endDate.toISOString(),
-          status: 'active',
-          is_reinvestment: isReinvestment,
-        })
-        .select()
-        .single();
-
-      if (investmentError) throw investmentError;
-
-      // Update user balance
-      const { error: balanceError } = await supabase
-        .from('profiles')
-        .update({ balance: profile.balance - amountNum })
-        .eq('id', profile.id);
-
-      if (balanceError) throw balanceError;
-
-      // Create transaction record
-      await supabase
-        .from('transactions')
-        .insert({
-          user_id: profile.user_id,
-          type: isReinvestment ? 'reinvestment' : 'investment',
-          amount: -amountNum,
-          description: `${plan.name} ${isReinvestment ? 'reinvestment' : 'investment'} - $${amountNum}`,
-        });
+      await apiClient.createInvestment({
+        plan_id: plan.id,
+        amount: amountNum,
+        is_reinvestment: isReinvestment
+      });
 
       toast({
         title: "Investment Successful!",
@@ -188,7 +154,7 @@ const InvestmentModal: React.FC<InvestmentModalProps> = ({ isOpen, onClose, plan
               step="0.01"
             />
             <p className="text-sm text-gray-500 mt-1">
-              Available balance: ${profile?.balance?.toFixed(2) || '0.00'}
+              Available balance: ${user?.balance?.toFixed(2) || '0.00'}
             </p>
           </div>
 

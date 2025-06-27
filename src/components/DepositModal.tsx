@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { apiClient } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ const WALLET_ADDRESSES = {
 };
 
 const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState<'select' | 'deposit' | 'confirm'>('select');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<'BTC' | 'USDT'>('BTC');
@@ -71,11 +71,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
   };
 
   const handleConfirmDeposit = async () => {
-    if (!profile) {
-      console.error('DepositModal: No profile available for deposit');
+    if (!user) {
       toast({
         title: "Error",
-        description: "User profile not found. Please try again later.",
+        description: "User not found. Please try again later.",
         variant: "destructive",
       });
       return;
@@ -83,49 +82,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
 
     setLoading(true);
     try {
-      console.log('DepositModal: Creating deposit request for user ID:', profile.user_id);
-      const { data: depositData, error: depositError } = await supabase
-        .from('deposit_requests')
-        .insert([
-          {
-            user_id: profile.user_id, // Changed from profile.id to profile.user_id
-            amount: parseFloat(amount),
-            currency,
-            wallet_address: WALLET_ADDRESSES[currency],
-            status: 'pending'
-          },
-        ])
-        .select();
-
-      if (depositError) {
-        console.error('DepositModal: Error creating deposit request:', depositError);
-        throw depositError;
-      }
-      
-      console.log('DepositModal: Deposit request created successfully:', depositData);
-
-      // Create transaction record
-      console.log('DepositModal: Creating transaction record');
-      const { data: transactionData, error: transactionError } = await supabase
-        .from('transactions')
-        .insert([
-          {
-            user_id: profile.user_id, // Changed from profile.id to profile.user_id
-            type: 'deposit',
-            amount: parseFloat(amount),
-            status: 'pending',
-            description: `${currency} deposit request - $${amount}`,
-          },
-        ])
-        .select();
-
-      if (transactionError) {
-        console.error('DepositModal: Error creating transaction record:', transactionError);
-        // Don't throw here, as the deposit request was already created
-        console.warn('DepositModal: Deposit request created but transaction record failed');
-      } else {
-        console.log('DepositModal: Transaction record created successfully:', transactionData);
-      }
+      await apiClient.createDepositRequest({
+        amount: parseFloat(amount),
+        currency,
+        wallet_address: WALLET_ADDRESSES[currency]
+      });
 
       toast({
         title: "Success!",
@@ -135,7 +96,6 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onSuccess 
       onSuccess();
       handleClose();
     } catch (error: any) {
-      console.error('DepositModal: Error in handleConfirmDeposit:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to process deposit request",
