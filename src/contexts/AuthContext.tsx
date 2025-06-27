@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchProfile = async (userId: string, retries = 3): Promise<Profile | null> => {
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
       console.log('AuthContext: Fetching profile for user ID:', userId);
       
@@ -41,12 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         console.error('AuthContext: Profile fetch error:', profileError);
-        
-        if (profileError.code === 'PGRST116') {
+        // Try to create profile if it doesn't exist
+        if (profileError.code === 'PGRST116' || profileError.message?.includes('No rows found')) {
           console.log('AuthContext: Profile not found, creating new profile');
           
           const { data: newProfile, error: createError } = await supabase
@@ -64,11 +64,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (createError) {
             console.error('AuthContext: Profile creation error:', createError);
-            if (retries > 0) {
-              console.log(`AuthContext: Retrying profile creation, ${retries} attempts left`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              return fetchProfile(userId, retries - 1);
-            }
             return null;
           }
 
@@ -78,15 +73,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
+      if (!profileData) {
+        console.log('AuthContext: No profile found, creating new profile');
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: userId,
+            name: 'New User',
+            role: 'user',
+            balance: 0,
+            btc_wallet: '',
+            usdt_wallet: ''
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('AuthContext: Profile creation error:', createError);
+          return null;
+        }
+
+        console.log('AuthContext: Profile created successfully:', newProfile);
+        return newProfile;
+      }
+
       console.log('AuthContext: Profile fetched successfully:', profileData);
       return profileData;
     } catch (error) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
-      if (retries > 0) {
-        console.log(`AuthContext: Retrying profile fetch, ${retries} attempts left`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return fetchProfile(userId, retries - 1);
-      }
       return null;
     }
   };
@@ -257,22 +271,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
+    let authSubscription: any = null;
 
     const initAuth = async () => {
       try {
         console.log('AuthContext: Initializing auth state');
         
+        // Set up auth state listener first
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!mounted) return;
+
+          console.log('AuthContext: Auth state changed', { event, hasUser: !!session?.user });
+
+          if (session?.user) {
+            setUser(session.user);
+            
+            // Fetch profile for the user
+            try {
+              const profileData = await fetchProfile(session.user.id);
+              if (mounted) {
+                setProfile(profileData);
+                setLoading(false);
+              }
+            } catch (error) {
+              console.error('AuthContext: Error fetching profile on auth change:', error);
+              if (mounted) {
+                setProfile(null);
+                setLoading(false);
+              }
+            }
+          } else {
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+          }
+        });
+
+        authSubscription = subscription;
+
+        // Then check for existing session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('AuthContext: Session error:', error);
+          if (mounted) {
+            setLoading(false);
+          }
         } else if (session?.user && mounted) {
-          console.log('AuthContext: Session found, setting user');
+          console.log('AuthContext: Existing session found');
           setUser(session.user);
           
-          const profileData = await fetchProfile(session.user.id);
-          if (mounted) {
-            setProfile(profileData);
+          try {
+            const profileData = await fetchProfile(session.user.id);
+            if (mounted) {
+              setProfile(profileData);
+            }
+          } catch (error) {
+            console.error('AuthContext: Error fetching profile on init:', error);
+            if (mounted) {
+              setProfile(null);
+            }
           }
         }
 
@@ -289,31 +347,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      console.log('AuthContext: Auth state changed', { event, hasUser: !!session?.user });
-
-      if (session?.user) {
-        setUser(session.user);
-        setLoading(true);
-        
-        const profileData = await fetchProfile(session.user.id);
-        if (mounted) {
-          setProfile(profileData);
-          setLoading(false);
-        }
-      } else {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-      }
-    });
-
     return () => {
       console.log('AuthContext: Cleaning up');
       mounted = false;
-      subscription.unsubscribe();
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, []);
 
