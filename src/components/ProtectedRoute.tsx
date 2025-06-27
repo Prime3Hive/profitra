@@ -21,40 +21,28 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, adminOnly = f
     adminOnly
   });
 
-  // If we're still loading, show the spinner (with reduced timeout handled in AuthContext)
   if (loading) {
     console.log('ProtectedRoute: Showing loading spinner');
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center">
-          <Loader2 className="h-8 w-8 animate-spin mb-4" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <Loader2 className="h-8 w-8 animate-spin mb-4 text-blue-600" />
+          <p className="text-sm text-muted-foreground">Loading your account...</p>
         </div>
       </div>
     );
   }
   
-  // If there's no user, redirect to signin
   if (!user) {
     console.log('ProtectedRoute: No user, redirecting to signin');
     return <Navigate to="/signin" state={{ from: location }} replace />;
   }
 
-  // For admin routes, check if profile exists and has admin role
-  if (adminOnly) {
-    if (!profile) {
-      console.log('ProtectedRoute: No profile for admin check, redirecting to dashboard');
-      return <Navigate to="/dashboard" replace />;
-    }
-    
-    if (profile.role !== 'admin') {
-      console.log('ProtectedRoute: Not admin, redirecting to dashboard');
-      return <Navigate to="/dashboard" replace />;
-    }
+  if (adminOnly && profile && profile.role !== 'admin') {
+    console.log('ProtectedRoute: Not admin, redirecting to dashboard');
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // For non-admin routes, allow access even if profile is still loading
-  // The user is authenticated, that's what matters for basic access
   console.log('ProtectedRoute: Rendering protected content');
   return <>{children}</>;
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +13,7 @@ import {
   History,
   Plus,
   RefreshCw,
-  DollarSign,
-  ArrowUpRight,
-  Eye,
-  LogOut
+  User
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import DepositModal from '@/components/DepositModal';
@@ -54,7 +52,7 @@ interface Transaction {
 }
 
 const Dashboard: React.FC = () => {
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile, loading: authLoading } = useAuth();
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -66,10 +64,10 @@ const Dashboard: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<InvestmentPlan | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && !authLoading) {
       fetchData();
     }
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const fetchData = async () => {
     if (!user?.id) {
@@ -91,18 +89,20 @@ const Dashboard: React.FC = () => {
 
       if (plansError) {
         console.error('Dashboard: Error fetching investment plans:', plansError);
+        toast({
+          title: "Warning",
+          description: "Could not load investment plans",
+          variant: "destructive",
+        });
       } else {
         console.log('Dashboard: Fetched plans:', plansData?.length || 0);
         setPlans(plansData || []);
       }
 
-      // Fetch user investments
+      // Fetch user investments with plan details
       const { data: investmentsData, error: investmentsError } = await supabase
         .from('investments')
-        .select(`
-          *,
-          plan:investment_plans(*)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -110,7 +110,24 @@ const Dashboard: React.FC = () => {
         console.error('Dashboard: Error fetching investments:', investmentsError);
       } else {
         console.log('Dashboard: Fetched investments:', investmentsData?.length || 0);
-        setInvestments(investmentsData || []);
+        
+        // Fetch plan details for each investment
+        const investmentsWithPlans = await Promise.all(
+          (investmentsData || []).map(async (investment) => {
+            if (investment.plan_id) {
+              const { data: planData } = await supabase
+                .from('investment_plans')
+                .select('*')
+                .eq('id', investment.plan_id)
+                .single();
+              
+              return { ...investment, plan: planData };
+            }
+            return investment;
+          })
+        );
+        
+        setInvestments(investmentsWithPlans);
       }
 
       // Fetch user transactions
@@ -165,8 +182,8 @@ const Dashboard: React.FC = () => {
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
   const totalReturns = investments.filter(inv => inv.status === 'completed').reduce((sum, inv) => sum + inv.roi_amount, 0);
 
-  // Show loading state while user is being authenticated or data is being fetched
-  if (!user || loading) {
+  // Show loading state while authenticating or fetching data
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
@@ -189,10 +206,11 @@ const Dashboard: React.FC = () => {
       <Navbar />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {profile?.name || 'User'}!</p>
+          <p className="text-gray-600">
+            Welcome back, {profile?.name || user?.email || 'User'}!
+          </p>
         </div>
 
         {/* Stats Cards */}
@@ -243,11 +261,11 @@ const Dashboard: React.FC = () => {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Plans</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Profile</CardTitle>
+              <User className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{activeInvestments.length}</div>
+              <div className="text-sm font-medium">{profile?.role || 'User'}</div>
               <Button 
                 size="sm" 
                 variant="outline" 
@@ -269,36 +287,46 @@ const Dashboard: React.FC = () => {
           </TabsList>
 
           <TabsContent value="invest" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {plans.map((plan) => (
-                <Card key={plan.id} className="relative overflow-hidden">
-                  <CardHeader>
-                    <CardTitle className="flex justify-between items-center">
-                      {plan.name}
-                      <Badge variant="secondary">{plan.roi_percent}% ROI</Badge>
-                    </CardTitle>
-                    <CardDescription>
-                      ${plan.min_amount.toLocaleString()} - {plan.max_amount ? `$${plan.max_amount.toLocaleString()}` : 'Unlimited'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="text-sm text-gray-600">
-                      Duration: {plan.duration_hours < 24 ? `${plan.duration_hours} hours` : `${plan.duration_hours / 24} days`}
-                    </div>
-                    <Button 
-                      className="w-full" 
-                      onClick={() => handleInvest(plan)}
-                      disabled={!profile?.balance || profile.balance < plan.min_amount}
-                    >
-                      {!profile?.balance || profile.balance < plan.min_amount 
-                        ? 'Insufficient Balance' 
-                        : 'Invest Now'
-                      }
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {plans.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Investment Plans Available</h3>
+                  <p className="text-gray-600">Investment plans will appear here when available.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {plans.map((plan) => (
+                  <Card key={plan.id} className="relative overflow-hidden">
+                    <CardHeader>
+                      <CardTitle className="flex justify-between items-center">
+                        {plan.name}
+                        <Badge variant="secondary">{plan.roi_percent}% ROI</Badge>
+                      </CardTitle>
+                      <CardDescription>
+                        ${plan.min_amount.toLocaleString()} - {plan.max_amount ? `$${plan.max_amount.toLocaleString()}` : 'Unlimited'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-sm text-gray-600">
+                        Duration: {plan.duration_hours < 24 ? `${plan.duration_hours} hours` : `${plan.duration_hours / 24} days`}
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={() => handleInvest(plan)}
+                        disabled={!profile?.balance || profile.balance < plan.min_amount}
+                      >
+                        {!profile?.balance || profile.balance < plan.min_amount 
+                          ? 'Insufficient Balance' 
+                          : 'Invest Now'
+                        }
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="active" className="space-y-6">
@@ -321,7 +349,7 @@ const Dashboard: React.FC = () => {
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
                         {investment.plan?.name || 'Investment Plan'}
-                        <Badge variant="default">Investment</Badge>
+                        <Badge variant="default">Active</Badge>
                       </CardTitle>
                       <CardDescription>
                         Invested: ${investment.amount.toFixed(2)} • Expected: ${investment.roi_amount.toFixed(2)}

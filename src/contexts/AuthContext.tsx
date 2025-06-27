@@ -31,10 +31,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
   const { toast } = useToast();
 
-  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+  const fetchProfile = async (userId: string, retries = 3): Promise<Profile | null> => {
     try {
       console.log('AuthContext: Fetching profile for user ID:', userId);
       
@@ -47,7 +46,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileError) {
         console.error('AuthContext: Profile fetch error:', profileError);
         
-        // If profile doesn't exist, create one
         if (profileError.code === 'PGRST116') {
           console.log('AuthContext: Profile not found, creating new profile');
           
@@ -66,6 +64,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (createError) {
             console.error('AuthContext: Profile creation error:', createError);
+            if (retries > 0) {
+              console.log(`AuthContext: Retrying profile creation, ${retries} attempts left`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              return fetchProfile(userId, retries - 1);
+            }
             return null;
           }
 
@@ -79,6 +82,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return profileData;
     } catch (error) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
+      if (retries > 0) {
+        console.log(`AuthContext: Retrying profile fetch, ${retries} attempts left`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return fetchProfile(userId, retries - 1);
+      }
       return null;
     }
   };
@@ -96,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
+      setLoading(true);
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -117,11 +126,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('AuthContext: Sign in error:', error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const signUp = async (email: string, password: string, name: string, btcWallet: string, usdtWallet: string) => {
     try {
+      setLoading(true);
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -131,7 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             btc_wallet: btcWallet,
             usdt_wallet: usdtWallet,
           },
-          emailRedirectTo: `${window.location.origin}/`
+          emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
 
@@ -151,11 +163,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('AuthContext: Sign up error:', error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const signOut = async () => {
     try {
+      setLoading(true);
       const { error } = await supabase.auth.signOut();
       
       if (error) {
@@ -167,6 +182,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Clear state immediately
+      setUser(null);
+      setProfile(null);
+
       toast({
         title: "Signed Out",
         description: "You have been signed out successfully.",
@@ -174,6 +193,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('AuthContext: Sign out error:', error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -222,7 +243,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
-      // Refresh profile after update
       await refreshProfile();
 
       toast({
@@ -239,8 +259,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
 
     const initAuth = async () => {
-      if (initialized) return;
-
       try {
         console.log('AuthContext: Initializing auth state');
         
@@ -252,7 +270,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('AuthContext: Session found, setting user');
           setUser(session.user);
           
-          // Fetch profile for the authenticated user
           const profileData = await fetchProfile(session.user.id);
           if (mounted) {
             setProfile(profileData);
@@ -260,7 +277,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (mounted) {
-          setInitialized(true);
           setLoading(false);
         }
       } catch (error) {
@@ -280,40 +296,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (session?.user) {
         setUser(session.user);
+        setLoading(true);
         
-        // Only fetch profile if we don't have one or if the user changed
-        if (!profile || profile.user_id !== session.user.id) {
-          console.log('AuthContext: Fetching profile for auth change');
-          const profileData = await fetchProfile(session.user.id);
-          if (mounted) {
-            setProfile(profileData);
-          }
+        const profileData = await fetchProfile(session.user.id);
+        if (mounted) {
+          setProfile(profileData);
+          setLoading(false);
         }
       } else {
         setUser(null);
         setProfile(null);
-      }
-
-      if (mounted) {
         setLoading(false);
       }
     });
-
-    // Safety timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.log('AuthContext: Safety timeout reached, forcing loading to false');
-        setLoading(false);
-      }
-    }, 3000);
 
     return () => {
       console.log('AuthContext: Cleaning up');
       mounted = false;
       subscription.unsubscribe();
-      clearTimeout(timeout);
     };
-  }, [initialized, profile, loading]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ 
