@@ -71,7 +71,8 @@
     "jsonwebtoken": "^9.0.2",
     "sqlite3": "^5.1.6",
     "uuid": "^9.0.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "serverless-http": "^3.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
